@@ -31,7 +31,7 @@
 | **데이터베이스** | PostgreSQL | 단일 RDB. 관계형 모델링·트랜잭션 |
 | **ORM** | Prisma | 스키마·마이그레이션·타입 안전 쿼리 |
 | **캐시/실시간** | Redis | 캐시·pub/sub·TTL·원자적 카운터·rate limit |
-| **이벤트 스트리밍** | Kafka (또는 Redpanda) | 도메인 이벤트 발행 → 다중 컨슈머 팬아웃 |
+| **이벤트 스트리밍** | Apache Kafka (cp-kafka, KRaft) | 도메인 이벤트 발행 → 다중 컨슈머 팬아웃 |
 | **실시간 통신** | WebSocket (NestJS Gateway) | 1:1 채팅·알림 푸시 |
 | **아키텍처** | DDD (도메인 주도 설계) | 바운디드 컨텍스트 + 레이어드 구조 |
 | **테스트/품질** | Jest, ESLint, Prettier | 단위·e2e 테스트, 정적 검사 |
@@ -60,7 +60,7 @@
 - (심화) **Transactional Outbox** 패턴으로 dual-write 불일치 제거
 
 ### DDD — 도메인 중심 설계
-- 도메인을 **바운디드 컨텍스트**(Identity·Property·Board·Chat·Notification·Audit)로 분리
+- 도메인을 **바운디드 컨텍스트**(Auth·Property·Board·Chat·Notification·Audit)로 분리
 - `interface → application → domain → infrastructure` **단방향 레이어드 구조**와 **의존성 역전**(도메인이 Prisma/Redis/Kafka를 모르게)
 - **애그리거트 경계 = 트랜잭션 경계 = 정합성 경계**, 컨텍스트 간은 도메인 이벤트로 느슨하게 연결
 
