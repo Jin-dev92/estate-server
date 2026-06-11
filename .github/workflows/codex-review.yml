@@ -44,8 +44,11 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           BASE="origin/${{ github.event.pull_request.base.ref }}"
-          if codex exec review \
-              --base "$BASE" \
+          # base 브랜치 대비 PR 변경분(diff)을 추출
+          git diff "$BASE"...HEAD > pr.diff
+          # 커스텀 보안 리뷰 프롬프트를 인자로, diff는 stdin으로 전달
+          # (codex exec는 piped stdin을 <stdin> 블록으로 프롬프트에 덧붙인다)
+          if cat pr.diff | codex exec \
               --dangerously-bypass-approvals-and-sandbox \
               -o review-output.md \
               "$(cat .github/codex/review-prompt.md)"; then
