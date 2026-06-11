@@ -1,0 +1,75 @@
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+# 같은 PR에서 이전 실행이 돌고 있으면 취소
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# 최소 권한: 코드 읽기 + PR 코멘트 쓰기
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    # draft PR에는 리뷰하지 않는다 (opened 이벤트는 draft도 포함되므로 여기서 거른다)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for base diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Authenticate Codex (headless)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: printenv OPENAI_API_KEY | codex login --with-api-key
+
+      - name: Run Codex review
+        id: review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          if codex exec review \
+              --base "$BASE" \
+              --dangerously-bypass-approvals-and-sandbox \
+              -o review-output.md \
+              "$(cat .github/codex/review-prompt.md)"; then
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          if [ "${{ steps.review.outputs.status }}" = "ok" ] && [ -s review-output.md ]; then
+            {
+              echo "## 🤖 Codex 자동 리뷰"
+              echo
+              cat review-output.md
+            } > comment.md
+          else
+            {
+              echo "## 🤖 Codex 자동 리뷰"
+              echo
+              echo "⚠️ 리뷰 생성에 실패했습니다. Actions 로그를 확인해 주세요."
+            } > comment.md
+          fi
+          gh pr comment "$PR" --body-file comment.md
