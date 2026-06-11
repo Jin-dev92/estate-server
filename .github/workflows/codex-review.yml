@@ -1,12 +1,29 @@
-name: Codex PR Review
+# =============================================================================
+# ⚠️ 현재 비활성화됨 — 학습용 프로젝트
+#
+# 이 프로젝트는 학습용이라 PR 리뷰를 GitHub Actions(OpenAI API 종량제) 대신
+# 로컬 codex(ChatGPT 구독 인증, 추가 비용 0)로 수행합니다.
+#   → 로컬 리뷰 실행: scripts/review-and-pr.sh
+#
+# 아래 잡 본문(트리거/스텝/리뷰 명령)은 E2E 검증을 마친 상태로 그대로 보존돼
+# 있습니다. 상업화 단계에서 API 비용이 괜찮아지면 다음 3가지만 하면 CI 자동
+# 리뷰가 다시 켜집니다:
+#   1) 레포 Secret 에 결제된 OPENAI_API_KEY 등록
+#   2) 아래 `on:` 의 pull_request 트리거 주석을 해제하고 workflow_dispatch 줄 제거
+#   3) jobs.review 의 `if: ${{ false }}` 가드를 원래의 draft 가드로 교체
+# =============================================================================
+
+name: Codex PR Review (disabled - learning project)
 
 on:
-  pull_request:
-    types: [opened, ready_for_review]
+  # 상업화 후: 아래 두 줄 주석을 해제하고 workflow_dispatch 를 제거하면 자동 활성화
+  # pull_request:
+  #   types: [opened, ready_for_review]
+  workflow_dispatch: {}
 
-# 같은 PR에서 이전 실행이 돌고 있으면 취소
+# 같은 PR에서 이전 실행이 돌고 있으면 취소 (workflow_dispatch 시엔 run_id 로 폴백)
 concurrency:
-  group: codex-review-${{ github.event.pull_request.number }}
+  group: codex-review-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 # 최소 권한: 코드 읽기 + PR 코멘트 쓰기
@@ -16,8 +33,10 @@ permissions:
 
 jobs:
   review:
-    # draft PR에는 리뷰하지 않는다 (opened 이벤트는 draft도 포함되므로 여기서 거른다)
-    if: github.event.pull_request.draft == false
+    # 학습용 동안 비활성화. 리포지토리 변수 ENABLE_CODEX_CI=true 가 설정될 때만 실행됨.
+    # 상업화 시: 위 pull_request 트리거를 켜고, 이 가드를 draft 가드로 교체:
+    #   if: github.event.pull_request.draft == false
+    if: vars.ENABLE_CODEX_CI == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history for base diff)
