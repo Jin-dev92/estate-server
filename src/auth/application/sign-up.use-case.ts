@@ -1,7 +1,9 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { User } from '../domain/user.entity';
 import { USER_REPOSITORY, UserRepository } from '../domain/user.repository';
 import { PASSWORD_HASHER, PasswordHasher } from '../domain/password-hasher';
+import { AppException } from '../../common/errors/app-exception';
+import { AuthError } from '../auth.errors';
 
 export interface SignUpInput {
   email: string;
@@ -18,7 +20,7 @@ export class SignUpUseCase {
 
   async execute(input: SignUpInput): Promise<User> {
     const existing = await this.users.findByEmail(input.email);
-    if (existing) throw new ConflictException('email already in use');
+    if (existing) throw new AppException(AuthError.EMAIL_IN_USE);
     const passwordHash = await this.hasher.hash(input.password);
     const user = User.create({
       email: input.email,

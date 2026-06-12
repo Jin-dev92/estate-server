@@ -1,7 +1,9 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { USER_REPOSITORY, UserRepository } from '../domain/user.repository';
 import { PASSWORD_HASHER, PasswordHasher } from '../domain/password-hasher';
 import { TOKEN_ISSUER, TokenIssuer } from '../domain/token-issuer';
+import { AppException } from '../../common/errors/app-exception';
+import { AuthError } from '../auth.errors';
 
 export interface LoginInput {
   email: string;
@@ -18,9 +20,9 @@ export class LoginUseCase {
 
   async execute(input: LoginInput): Promise<{ accessToken: string }> {
     const user = await this.users.findByEmail(input.email);
-    if (!user) throw new UnauthorizedException('invalid credentials');
+    if (!user) throw new AppException(AuthError.INVALID_CREDENTIALS);
     const ok = await this.hasher.compare(input.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('invalid credentials');
+    if (!ok) throw new AppException(AuthError.INVALID_CREDENTIALS);
     const accessToken = await this.tokenIssuer.issue({
       sub: user.id!,
       email: user.email,

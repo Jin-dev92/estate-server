@@ -1,13 +1,10 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from './roles.decorator';
 import { Role } from '../domain/role.enum';
 import { TokenPayload } from '../domain/token-issuer';
+import { AppException } from '../../common/errors/app-exception';
+import { AuthError } from '../auth.errors';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -24,7 +21,7 @@ export class RolesGuard implements CanActivate {
       .switchToHttp()
       .getRequest<{ user?: TokenPayload }>();
     if (!user || !required.includes(user.role)) {
-      throw new ForbiddenException('insufficient role');
+      throw new AppException(AuthError.INSUFFICIENT_ROLE);
     }
     return true;
   }

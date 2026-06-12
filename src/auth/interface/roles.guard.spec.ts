@@ -1,7 +1,8 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RolesGuard } from './roles.guard';
 import { Role } from '../domain/role.enum';
+import { AppException } from '../../common/errors/app-exception';
 
 function contextWithUser(role: Role | undefined): ExecutionContext {
   return {
@@ -36,7 +37,7 @@ describe('RolesGuard', () => {
     const guard = new RolesGuard(reflectorReturning([Role.OWNER]));
 
     expect(() => guard.canActivate(contextWithUser(Role.TENANT))).toThrow(
-      ForbiddenException,
+      AppException,
     );
   });
 });

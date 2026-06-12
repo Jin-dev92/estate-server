@@ -1,9 +1,11 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '../domain/user.entity';
 import { Role } from '../domain/role.enum';
 import { UserRepository } from '../domain/user.repository';
+import { AppException } from '../../common/errors/app-exception';
+import { AuthError } from '../auth.errors';
 
 @Injectable()
 export class PrismaUserRepository implements UserRepository {
@@ -45,7 +47,7 @@ export class PrismaUserRepository implements UserRepository {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new ConflictException('email already in use');
+        throw new AppException(AuthError.EMAIL_IN_USE);
       }
       throw e;
     }

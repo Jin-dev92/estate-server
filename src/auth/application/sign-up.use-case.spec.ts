@@ -52,6 +52,6 @@ describe('SignUpUseCase', () => {
         name: '철수',
         password: 'pw999999',
       }),
-    ).rejects.toThrow('email already in use');
+    ).rejects.toMatchObject({ code: 'AUTH_EMAIL_IN_USE' });
   });
 });

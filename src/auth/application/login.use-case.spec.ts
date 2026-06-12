@@ -39,13 +39,13 @@ describe('LoginUseCase', () => {
     const useCase = new LoginUseCase(repo, hasher, tokenIssuer);
     await expect(
       useCase.execute({ email: 'none@test.com', password: 'x' }),
-    ).rejects.toThrow('invalid credentials');
+    ).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' });
   });
 
   it('비밀번호가 틀리면 Unauthorized', async () => {
     const useCase = new LoginUseCase(repo, hasher, tokenIssuer);
     await expect(
       useCase.execute({ email: 'a@test.com', password: 'wrong' }),
-    ).rejects.toThrow('invalid credentials');
+    ).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' });
   });
 });
