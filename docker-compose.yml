@@ -5,7 +5,8 @@ services:
       POSTGRES_USER: estate
       POSTGRES_PASSWORD: estate
       POSTGRES_DB: estate
-    ports: ["5432:5432"]
+    # 호스트 네이티브 postgres가 5432를 점유 중이라 호스트 측은 5433으로 매핑
+    ports: ["5433:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U estate"]
