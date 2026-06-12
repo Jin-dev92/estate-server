@@ -18,7 +18,12 @@ describe('Post entity', () => {
 
   it('제목이 비면 예외', () => {
     expect(() =>
-      Post.create({ buildingId: 'b1', authorId: 'u1', title: '', content: '내용' }),
+      Post.create({
+        buildingId: 'b1',
+        authorId: 'u1',
+        title: '',
+        content: '내용',
+      }),
     ).toThrow('title is required');
   });
 

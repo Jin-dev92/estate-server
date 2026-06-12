@@ -30,7 +30,12 @@ const commentRepo: CommentRepository = {
   create: (c) => Promise.resolve(c),
   findByPost: () =>
     Promise.resolve([
-      Comment.reconstitute({ id: 'c1', postId: POST_ID, authorId: 'u2', content: '댓글' }),
+      Comment.reconstitute({
+        id: 'c1',
+        postId: POST_ID,
+        authorId: 'u2',
+        content: '댓글',
+      }),
     ]),
 };
 

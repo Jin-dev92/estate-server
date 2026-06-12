@@ -1,4 +1,9 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Post } from '../domain/post.entity';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
 import { BOARD_CACHE, BoardCache } from './board-cache';

@@ -61,9 +61,16 @@ describe('ListPostsUseCase', () => {
   it('캐시 miss면 repo를 조회하고 캐시에 채운다', async () => {
     const cache = new FakeCache();
     const repo = repoWithPosts([samplePost]);
-    const useCase = new ListPostsUseCase(repo, cache, membershipReturning(true));
+    const useCase = new ListPostsUseCase(
+      repo,
+      cache,
+      membershipReturning(true),
+    );
 
-    const result = await useCase.execute({ userId: USER_ID, buildingId: BUILDING_ID });
+    const result = await useCase.execute({
+      userId: USER_ID,
+      buildingId: BUILDING_ID,
+    });
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('p1');
@@ -72,12 +79,21 @@ describe('ListPostsUseCase', () => {
 
   it('캐시 hit이면 repo를 건너뛰고 캐시 값을 반환한다', async () => {
     const cache = new FakeCache();
-    cache.list = [{ id: 'cached', category: PostCategory.FREE, title: 'c', authorId: 'x' }];
+    cache.list = [
+      { id: 'cached', category: PostCategory.FREE, title: 'c', authorId: 'x' },
+    ];
     const repo = repoWithPosts([samplePost]);
     const findSpy = jest.spyOn(repo, 'findByBuilding');
-    const useCase = new ListPostsUseCase(repo, cache, membershipReturning(true));
+    const useCase = new ListPostsUseCase(
+      repo,
+      cache,
+      membershipReturning(true),
+    );
 
-    const result = await useCase.execute({ userId: USER_ID, buildingId: BUILDING_ID });
+    const result = await useCase.execute({
+      userId: USER_ID,
+      buildingId: BUILDING_ID,
+    });
 
     expect(result[0].id).toBe('cached');
     expect(findSpy).not.toHaveBeenCalled();

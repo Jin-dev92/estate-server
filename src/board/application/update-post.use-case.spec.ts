@@ -71,10 +71,18 @@ describe('UpdatePostUseCase', () => {
   });
 
   it('작성자가 아니면 ForbiddenException', async () => {
-    const useCase = new UpdatePostUseCase(postRepoWith(ownedPost), new SpyCache());
+    const useCase = new UpdatePostUseCase(
+      postRepoWith(ownedPost),
+      new SpyCache(),
+    );
 
     await expect(
-      useCase.execute({ userId: 'other', postId: POST_ID, title: 't', content: 'c' }),
+      useCase.execute({
+        userId: 'other',
+        postId: POST_ID,
+        title: 't',
+        content: 'c',
+      }),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -82,7 +90,12 @@ describe('UpdatePostUseCase', () => {
     const useCase = new UpdatePostUseCase(postRepoWith(null), new SpyCache());
 
     await expect(
-      useCase.execute({ userId: AUTHOR_ID, postId: POST_ID, title: 't', content: 'c' }),
+      useCase.execute({
+        userId: AUTHOR_ID,
+        postId: POST_ID,
+        title: 't',
+        content: 'c',
+      }),
     ).rejects.toThrow(NotFoundException);
   });
 });

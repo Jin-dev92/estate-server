@@ -1,7 +1,15 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Comment } from '../domain/comment.entity';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
-import { COMMENT_REPOSITORY, CommentRepository } from '../domain/comment.repository';
+import {
+  COMMENT_REPOSITORY,
+  CommentRepository,
+} from '../domain/comment.repository';
 import { BOARD_CACHE, BoardCache } from './board-cache';
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
 

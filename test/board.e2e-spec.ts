@@ -34,9 +34,13 @@ describe('Board (e2e)', () => {
   }
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     prisma = app.get(PrismaService);
     redis = app.get(RedisService);
     await app.init();
@@ -44,7 +48,10 @@ describe('Board (e2e)', () => {
     await signup(ownerEmail);
     await signup(tenantEmail);
     await signup(outsiderEmail);
-    await prisma.user.update({ where: { email: ownerEmail }, data: { role: 'OWNER' } });
+    await prisma.user.update({
+      where: { email: ownerEmail },
+      data: { role: 'OWNER' },
+    });
     ownerToken = await login(ownerEmail);
     tenantToken = await login(tenantEmail);
     outsiderToken = await login(outsiderEmail);
@@ -77,7 +84,9 @@ describe('Board (e2e)', () => {
   });
 
   afterAll(async () => {
-    const owner = await prisma.user.findUnique({ where: { email: ownerEmail } });
+    const owner = await prisma.user.findUnique({
+      where: { email: ownerEmail },
+    });
     if (owner) {
       const buildings = await prisma.building.findMany({
         where: { ownerId: owner.id },
@@ -119,7 +128,9 @@ describe('Board (e2e)', () => {
       .get(`/buildings/${buildingId}/posts`)
       .set('Authorization', `Bearer ${tenantToken}`)
       .expect(200)
-      .expect((res) => expect((res.body as unknown[]).length).toBeGreaterThan(0));
+      .expect((res) =>
+        expect((res.body as unknown[]).length).toBeGreaterThan(0),
+      );
 
     expect(await redis.exists(`board:list:${buildingId}`)).toBe(1);
 
@@ -194,6 +205,8 @@ describe('Board (e2e)', () => {
       .set('Authorization', `Bearer ${tenantToken}`)
       .send({ title: '수정됨', content: '수정본문' })
       .expect(200)
-      .expect((res) => expect((res.body as { title: string }).title).toBe('수정됨'));
+      .expect((res) =>
+        expect((res.body as { title: string }).title).toBe('수정됨'),
+      );
   });
 });
