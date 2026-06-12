@@ -1,6 +1,8 @@
 # M0 — 프로젝트 기반 + JWT 인증 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **문서 규칙:** 이 계획은 예시 구현·테스트 코드를 싣지 않는다. 각 단계는 "무엇을 만들고 무엇을 검증하는지"를 산문으로 기술하고, 실제 코드는 구현 단계에서 작성한다. 실행/검증/커밋용 셸 명령만 코드 블록으로 남긴다.
 
 **Goal:** docker-compose(Postgres·Redis·Kafka) 인프라와 Prisma 초기 스키마를 띄우고, DDD 레이어드 구조를 따르는 Auth 컨텍스트로 회원가입/로그인(JWT) 흐름을 동작시킨다.
 
@@ -84,40 +86,26 @@ test/auth.e2e-spec.ts                           Create  signup→login→me e2e
 
 ## Task 1: 의존성 설치 & 환경 스캐폴드
 
-**Files:**
-- Modify: `package.json` (의존성 추가 — npm이 자동 수정)
-- Create: `.env.example`, `.env`
+**Files:** Modify `package.json`(npm 자동), Create `.env.example`·`.env`.
 
 - [ ] **Step 1: 런타임 의존성 설치**
 
-Run:
 ```bash
-npm install @prisma/client @nestjs/config @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
+npm install @prisma/client @nestjs/config @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt class-validator class-transformer
 ```
 
 - [ ] **Step 2: 개발 의존성 설치**
 
-Run:
 ```bash
 npm install -D prisma @types/passport-jwt @types/bcrypt
 ```
 
 - [ ] **Step 3: `.env.example` 작성**
 
-```bash
-# Database
-DATABASE_URL="postgresql://estate:estate@localhost:5432/estate?schema=public"
-# JWT
-JWT_SECRET="change-me-in-production"
-JWT_EXPIRES_IN="1h"
-# Infra (M1~)
-REDIS_URL="redis://localhost:6379"
-KAFKA_BROKERS="localhost:9092"
-```
+다음 키를 둔다: `DATABASE_URL`(postgresql, **host 포트 5433** — 호스트 네이티브 postgres와 5432 충돌 회피), `JWT_SECRET`, `JWT_EXPIRES_IN`(예: `1h`), `REDIS_URL`(M1~), `KAFKA_BROKERS`(M3~, 예: `localhost:9092`).
 
 - [ ] **Step 4: 실제 `.env` 생성 (gitignore됨)**
 
-Run:
 ```bash
 cp .env.example .env
 ```
@@ -133,64 +121,17 @@ git commit -m "chore(m0): add prisma/jwt/bcrypt deps and env scaffold"
 
 ## Task 2: 인프라 docker-compose
 
-**Files:**
-- Create: `docker-compose.yml`
+**Files:** Create `docker-compose.yml`.
 
 - [ ] **Step 1: `docker-compose.yml` 작성 (PG·Redis·Kafka(cp-kafka, KRaft))**
 
-```yaml
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: estate
-      POSTGRES_PASSWORD: estate
-      POSTGRES_DB: estate
-    ports: ["5432:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U estate"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+세 서비스를 정의한다.
+- **postgres**: `postgres:16-alpine`, user/pw/db = `estate`, **호스트 포트 5433 → 컨테이너 5432 매핑**(호스트 네이티브 postgres 충돌 회피), `pgdata` 볼륨, `pg_isready` healthcheck.
+- **redis**: `redis:7-alpine`, 포트 6379.
+- **kafka**: `confluentinc/cp-kafka:7.7.1`, 포트 9092. **KRaft 모드**(단일 노드가 broker+controller 겸임, ZooKeeper 불필요): `KAFKA_PROCESS_ROLES=broker,controller`, controller quorum/listener 설정, 단일 노드라 복제 계수·ISR·min-ISR = 1, 임의 base64 `CLUSTER_ID`, `kafka-broker-api-versions` healthcheck.
 
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
+- [ ] **Step 2: 인프라 기동 및 헬스 확인**
 
-  kafka:
-    image: confluentinc/cp-kafka:7.7.1
-    ports: ["9092:9092"]
-    environment:
-      # KRaft 모드: 단일 노드가 broker+controller 겸임 (ZooKeeper 불필요)
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      # 단일 노드라 복제 계수·ISR는 1
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      # KRaft 클러스터 식별자(임의 base64 UUID). 운영에선 `kafka-storage random-uuid`로 생성
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-    healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  pgdata:
-```
-
-- [ ] **Step 2: 인프라 기동 및 Postgres 헬스 확인**
-
-Run:
 ```bash
 docker compose up -d
 docker compose ps
@@ -208,43 +149,14 @@ git commit -m "chore(m0): add postgres/redis/kafka(kraft) docker-compose"
 
 ## Task 3: Prisma 초기 스키마 + 마이그레이션 + PrismaModule
 
-**Files:**
-- Create: `prisma/schema.prisma`
-- Create: `src/prisma/prisma.service.ts`
-- Create: `src/prisma/prisma.module.ts`
+**Files:** Create `prisma/schema.prisma`, `src/prisma/prisma.service.ts`, `src/prisma/prisma.module.ts`.
 
 - [ ] **Step 1: `prisma/schema.prisma` 작성 (User + Role)**
 
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-enum Role {
-  OWNER
-  TENANT
-  ADMIN
-}
-
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         Role     @default(TENANT)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-```
+`prisma-client-js` generator, `postgresql` datasource(`env("DATABASE_URL")`). **`Role` enum**: OWNER·TENANT·ADMIN. **`User` 모델**: `id`(cuid), `email`(unique), `passwordHash`, `name`, `role`(Role, default TENANT), `createdAt`/`updatedAt`.
 
 - [ ] **Step 2: 첫 마이그레이션 생성·적용 + 클라이언트 생성**
 
-Run:
 ```bash
 npx prisma migrate dev --name init_user
 ```
@@ -252,39 +164,14 @@ Expected: `prisma/migrations/<ts>_init_user/` 생성, "Your database is now in s
 
 - [ ] **Step 3: `src/prisma/prisma.service.ts` 작성**
 
-```typescript
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-
-@Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  async onModuleInit(): Promise<void> {
-    await this.$connect();
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    await this.$disconnect();
-  }
-}
-```
+`PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy` — `onModuleInit`에서 `$connect()`, `onModuleDestroy`에서 `$disconnect()`. `@Injectable()`.
 
 - [ ] **Step 4: `src/prisma/prisma.module.ts` 작성 (전역)**
 
-```typescript
-import { Global, Module } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
-
-@Global()
-@Module({
-  providers: [PrismaService],
-  exports: [PrismaService],
-})
-export class PrismaModule {}
-```
+`@Global() @Module` — `PrismaService`를 provide·export.
 
 - [ ] **Step 5: 컴파일 확인**
 
-Run:
 ```bash
 npx tsc --noEmit
 ```
@@ -303,141 +190,32 @@ git commit -m "feat(m0): add Prisma schema(User/Role), migration, global PrismaM
 
 도메인은 순수 TS만 사용한다(NestJS·Prisma import 금지).
 
-**Files:**
-- Create: `src/auth/domain/role.enum.ts`
-- Create: `src/auth/domain/user.entity.ts`
-- Create: `src/auth/domain/user.repository.ts`
-- Create: `src/auth/domain/password-hasher.ts`
-- Create: `src/auth/domain/token-issuer.ts`
-- Test: `src/auth/domain/user.entity.spec.ts`
+**Files:** Create `role.enum.ts`, `user.entity.ts`, `user.repository.ts`, `password-hasher.ts`, `token-issuer.ts` (모두 `src/auth/domain/`), Test `user.entity.spec.ts`.
 
 - [ ] **Step 1: 실패 테스트 작성 — User 엔티티 불변식**
 
-`src/auth/domain/user.entity.spec.ts`:
-```typescript
-import { User } from './user.entity';
-import { Role } from './role.enum';
-
-describe('User entity', () => {
-  it('create()로 신규 유저를 만들면 기본 역할은 TENANT', () => {
-    const user = User.create({
-      email: 'a@test.com',
-      name: '홍길동',
-      passwordHash: 'hashed',
-    });
-    expect(user.email).toBe('a@test.com');
-    expect(user.role).toBe(Role.TENANT);
-    expect(user.id).toBeNull();
-  });
-
-  it('이메일이 비면 생성 시 예외', () => {
-    expect(() =>
-      User.create({ email: '', name: '홍길동', passwordHash: 'h' }),
-    ).toThrow('email is required');
-  });
-});
-```
+검증: ① `User.create({email,name,passwordHash})`로 만들면 기본 역할은 `TENANT`이고 `id`는 `null`. ② 이메일이 비면 `'email is required'` 예외.
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `npx jest src/auth/domain/user.entity.spec.ts`
-Expected: FAIL — "Cannot find module './user.entity'".
+Run: `npx jest src/auth/domain/user.entity.spec.ts` → FAIL("Cannot find module './user.entity'").
 
-- [ ] **Step 3: `role.enum.ts` 작성**
-
-```typescript
-export enum Role {
-  OWNER = 'OWNER',
-  TENANT = 'TENANT',
-  ADMIN = 'ADMIN',
-}
-```
+- [ ] **Step 3: `role.enum.ts` 작성** — 문자열 enum OWNER·TENANT·ADMIN.
 
 - [ ] **Step 4: `user.entity.ts` 작성**
 
-```typescript
-import { Role } from './role.enum';
-
-interface UserProps {
-  id: string | null;
-  email: string;
-  name: string;
-  passwordHash: string;
-  role: Role;
-}
-
-export class User {
-  private constructor(private readonly props: UserProps) {}
-
-  static create(input: { email: string; name: string; passwordHash: string; role?: Role }): User {
-    if (!input.email) throw new Error('email is required');
-    if (!input.name) throw new Error('name is required');
-    return new User({
-      id: null,
-      email: input.email,
-      name: input.name,
-      passwordHash: input.passwordHash,
-      role: input.role ?? Role.TENANT,
-    });
-  }
-
-  static reconstitute(props: UserProps): User {
-    return new User(props);
-  }
-
-  get id(): string | null { return this.props.id; }
-  get email(): string { return this.props.email; }
-  get name(): string { return this.props.name; }
-  get role(): Role { return this.props.role; }
-  get passwordHash(): string { return this.props.passwordHash; }
-}
-```
+private 생성자 + `props`. 정적 팩토리 `create({email, name, passwordHash, role?})`: email/name 비면 예외, `id=null`, `role` 기본 `TENANT`. 정적 `reconstitute(props)`(DB 행 복원용). 읽기 게터: `id`(`string|null`), `email`, `name`, `role`, `passwordHash`.
 
 - [ ] **Step 5: 테스트 통과 확인**
 
-Run: `npx jest src/auth/domain/user.entity.spec.ts`
-Expected: PASS (2 passed).
+Run: `npx jest src/auth/domain/user.entity.spec.ts` → PASS (2 passed).
 
 - [ ] **Step 6: 리포지토리/해셔/토큰 인터페이스 작성**
 
-`src/auth/domain/user.repository.ts`:
-```typescript
-import { User } from './user.entity';
-
-export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
-
-export interface UserRepository {
-  findByEmail(email: string): Promise<User | null>;
-  save(user: User): Promise<User>;
-}
-```
-
-`src/auth/domain/password-hasher.ts`:
-```typescript
-export const PASSWORD_HASHER = Symbol('PASSWORD_HASHER');
-
-export interface PasswordHasher {
-  hash(plain: string): Promise<string>;
-  compare(plain: string, hash: string): Promise<boolean>;
-}
-```
-
-`src/auth/domain/token-issuer.ts`:
-```typescript
-import { Role } from './role.enum';
-
-export const TOKEN_ISSUER = Symbol('TOKEN_ISSUER');
-
-export interface TokenPayload {
-  sub: string;
-  email: string;
-  role: Role;
-}
-
-export interface TokenIssuer {
-  issue(payload: TokenPayload): Promise<string>;
-}
-```
+각 파일에 DI 토큰(Symbol) + 인터페이스를 둔다.
+- `user.repository.ts`: `USER_REPOSITORY` + `UserRepository { findByEmail(email): Promise<User|null>; save(user): Promise<User> }`.
+- `password-hasher.ts`: `PASSWORD_HASHER` + `PasswordHasher { hash(plain): Promise<string>; compare(plain, hash): Promise<boolean> }`.
+- `token-issuer.ts`: `TOKEN_ISSUER` + `TokenPayload { sub: string; email: string; role: Role }` + `TokenIssuer { issue(payload): Promise<string> }`.
 
 - [ ] **Step 7: Commit**
 
@@ -450,128 +228,38 @@ git commit -m "feat(m0): auth domain layer (User entity + repo/hasher/token inte
 
 ## Task 5: Auth 인프라 레이어 (bcrypt·Prisma·JWT 구현)
 
-**Files:**
-- Create: `src/auth/infrastructure/bcrypt-password-hasher.ts`
-- Create: `src/auth/infrastructure/prisma-user.repository.ts`
-- Create: `src/auth/infrastructure/jwt-token.service.ts`
-- Test: `src/auth/infrastructure/bcrypt-password-hasher.spec.ts`
+**Files:** Create `bcrypt-password-hasher.ts`, `prisma-user.repository.ts`, `jwt-token.service.ts` (모두 `src/auth/infrastructure/`), Test `bcrypt-password-hasher.spec.ts`.
 
 - [ ] **Step 1: 실패 테스트 작성 — bcrypt 해셔**
 
-`src/auth/infrastructure/bcrypt-password-hasher.spec.ts`:
-```typescript
-import { BcryptPasswordHasher } from './bcrypt-password-hasher';
-
-describe('BcryptPasswordHasher', () => {
-  const hasher = new BcryptPasswordHasher();
-
-  it('hash한 값은 원문과 다르고 compare로 검증된다', async () => {
-    const hash = await hasher.hash('secret123');
-    expect(hash).not.toBe('secret123');
-    expect(await hasher.compare('secret123', hash)).toBe(true);
-    expect(await hasher.compare('wrong', hash)).toBe(false);
-  });
-});
-```
+검증: `hash()`한 값은 원문과 다르고, `compare(원문, 해시)`는 true, `compare(틀린값, 해시)`는 false.
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `npx jest src/auth/infrastructure/bcrypt-password-hasher.spec.ts`
-Expected: FAIL — module 없음.
+Run: `npx jest src/auth/infrastructure/bcrypt-password-hasher.spec.ts` → FAIL(module 없음).
 
 - [ ] **Step 3: `bcrypt-password-hasher.ts` 작성**
 
-```typescript
-import { Injectable } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
-import { PasswordHasher } from '../domain/password-hasher';
-
-@Injectable()
-export class BcryptPasswordHasher implements PasswordHasher {
-  private readonly rounds = 10;
-
-  hash(plain: string): Promise<string> {
-    return bcrypt.hash(plain, this.rounds);
-  }
-
-  compare(plain: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(plain, hash);
-  }
-}
-```
+`@Injectable() BcryptPasswordHasher implements PasswordHasher`, rounds=10, `bcrypt.hash`/`bcrypt.compare` 위임.
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `npx jest src/auth/infrastructure/bcrypt-password-hasher.spec.ts`
-Expected: PASS.
+Run: `npx jest src/auth/infrastructure/bcrypt-password-hasher.spec.ts` → PASS.
 
 - [ ] **Step 5: `prisma-user.repository.ts` 작성 (도메인↔Prisma 매핑)**
 
-```typescript
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { User } from '../domain/user.entity';
-import { Role } from '../domain/role.enum';
-import { UserRepository } from '../domain/user.repository';
+`@Injectable() PrismaUserRepository implements UserRepository`, `PrismaService` 주입. `findByEmail`은 `prisma.user.findUnique({where:{email}})` → 없으면 null, 있으면 `User.reconstitute(...)`(role은 `as Role`). `save`는 `prisma.user.create(...)` 후 `reconstitute`.
 
-@Injectable()
-export class PrismaUserRepository implements UserRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async findByEmail(email: string): Promise<User | null> {
-    const row = await this.prisma.user.findUnique({ where: { email } });
-    if (!row) return null;
-    return User.reconstitute({
-      id: row.id,
-      email: row.email,
-      name: row.name,
-      passwordHash: row.passwordHash,
-      role: row.role as Role,
-    });
-  }
-
-  async save(user: User): Promise<User> {
-    const row = await this.prisma.user.create({
-      data: {
-        email: user.email,
-        name: user.name,
-        passwordHash: user.passwordHash,
-        role: user.role,
-      },
-    });
-    return User.reconstitute({
-      id: row.id,
-      email: row.email,
-      name: row.name,
-      passwordHash: row.passwordHash,
-      role: row.role as Role,
-    });
-  }
-}
-```
+> **리뷰 반영(구현 시):** `save`에서 동시 가입 TOCTOU 대비로 Prisma `P2002`(unique 위반)를 잡아 `ConflictException('email already in use')`로 변환한다(사전 중복체크와 같은 409 보장).
 
 - [ ] **Step 6: `jwt-token.service.ts` 작성**
 
-```typescript
-import { Injectable } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { TokenIssuer, TokenPayload } from '../domain/token-issuer';
-
-@Injectable()
-export class JwtTokenService implements TokenIssuer {
-  constructor(private readonly jwt: JwtService) {}
-
-  issue(payload: TokenPayload): Promise<string> {
-    return this.jwt.signAsync(payload);
-  }
-}
-```
+`@Injectable() JwtTokenService implements TokenIssuer`, `JwtService` 주입, `issue(payload)` = `jwt.signAsync(payload)`.
 
 - [ ] **Step 7: 컴파일 확인 후 Commit**
 
-Run: `npx tsc --noEmit`
-Expected: 에러 없음.
 ```bash
+npx tsc --noEmit
 git add src/auth/infrastructure
 git commit -m "feat(m0): auth infra (bcrypt hasher, prisma repo, jwt token service)"
 ```
@@ -580,98 +268,20 @@ git commit -m "feat(m0): auth infra (bcrypt hasher, prisma repo, jwt token servi
 
 ## Task 6: 회원가입 유스케이스 (application)
 
-**Files:**
-- Create: `src/auth/application/sign-up.use-case.ts`
-- Test: `src/auth/application/sign-up.use-case.spec.ts`
+**Files:** Create `src/auth/application/sign-up.use-case.ts`, Test `sign-up.use-case.spec.ts`.
 
 - [ ] **Step 1: 실패 테스트 작성 (인메모리 가짜 의존성)**
 
-`src/auth/application/sign-up.use-case.spec.ts`:
-```typescript
-import { SignUpUseCase } from './sign-up.use-case';
-import { User } from '../domain/user.entity';
-import { UserRepository } from '../domain/user.repository';
-import { PasswordHasher } from '../domain/password-hasher';
+인메모리 `FakeUserRepo` + 가짜 해셔(`hash`는 `hashed:${p}` 반환)로 검증: ① 신규 이메일이면 비밀번호를 해시해 저장하고 생성된 `id`·`passwordHash(hashed:pw...)`를 가진 유저 반환. ② 이미 존재하는 이메일이면 `'email already in use'` 예외.
+> 테스트 가짜의 async 메서드는 `await`가 없으므로 `Promise.resolve()` 반환 형태로 작성(eslint `require-await` 회피).
 
-class FakeUserRepo implements UserRepository {
-  private users: User[] = [];
-  async findByEmail(email: string) {
-    return this.users.find((u) => u.email === email) ?? null;
-  }
-  async save(user: User) {
-    const saved = User.reconstitute({
-      id: 'generated-id', email: user.email, name: user.name,
-      passwordHash: user.passwordHash, role: user.role,
-    });
-    this.users.push(saved);
-    return saved;
-  }
-}
-const fakeHasher: PasswordHasher = {
-  hash: async (p) => `hashed:${p}`,
-  compare: async (p, h) => h === `hashed:${p}`,
-};
-
-describe('SignUpUseCase', () => {
-  it('신규 이메일이면 비밀번호를 해시해 저장하고 유저를 반환', async () => {
-    const repo = new FakeUserRepo();
-    const useCase = new SignUpUseCase(repo, fakeHasher);
-    const user = await useCase.execute({ email: 'a@test.com', name: '길동', password: 'pw123456' });
-    expect(user.id).toBe('generated-id');
-    expect(user.passwordHash).toBe('hashed:pw123456');
-  });
-
-  it('이미 존재하는 이메일이면 예외', async () => {
-    const repo = new FakeUserRepo();
-    const useCase = new SignUpUseCase(repo, fakeHasher);
-    await useCase.execute({ email: 'a@test.com', name: '길동', password: 'pw123456' });
-    await expect(
-      useCase.execute({ email: 'a@test.com', name: '철수', password: 'pw999999' }),
-    ).rejects.toThrow('email already in use');
-  });
-});
-```
-
-- [ ] **Step 2: 테스트 실패 확인**
-
-Run: `npx jest src/auth/application/sign-up.use-case.spec.ts`
-Expected: FAIL — module 없음.
+- [ ] **Step 2: 테스트 실패 확인** — Run: `npx jest src/auth/application/sign-up.use-case.spec.ts` → FAIL.
 
 - [ ] **Step 3: `sign-up.use-case.ts` 작성**
 
-```typescript
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
-import { User } from '../domain/user.entity';
-import { USER_REPOSITORY, UserRepository } from '../domain/user.repository';
-import { PASSWORD_HASHER, PasswordHasher } from '../domain/password-hasher';
+`@Injectable() SignUpUseCase`, `@Inject(USER_REPOSITORY)`·`@Inject(PASSWORD_HASHER)`. `execute({email,name,password})`: `findByEmail`로 중복 시 `ConflictException('email already in use')`, 아니면 해시 후 `User.create` → `save`.
 
-export interface SignUpInput {
-  email: string;
-  name: string;
-  password: string;
-}
-
-@Injectable()
-export class SignUpUseCase {
-  constructor(
-    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
-    @Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasher,
-  ) {}
-
-  async execute(input: SignUpInput): Promise<User> {
-    const existing = await this.users.findByEmail(input.email);
-    if (existing) throw new ConflictException('email already in use');
-    const passwordHash = await this.hasher.hash(input.password);
-    const user = User.create({ email: input.email, name: input.name, passwordHash });
-    return this.users.save(user);
-  }
-}
-```
-
-- [ ] **Step 4: 테스트 통과 확인**
-
-Run: `npx jest src/auth/application/sign-up.use-case.spec.ts`
-Expected: PASS (2 passed).
+- [ ] **Step 4: 테스트 통과 확인** — Run 동일 → PASS (2 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -684,101 +294,21 @@ git commit -m "feat(m0): SignUpUseCase with duplicate-email guard"
 
 ## Task 7: 로그인 유스케이스 (application)
 
-**Files:**
-- Create: `src/auth/application/login.use-case.ts`
-- Test: `src/auth/application/login.use-case.spec.ts`
+**Files:** Create `src/auth/application/login.use-case.ts`, Test `login.use-case.spec.ts`.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
-`src/auth/application/login.use-case.spec.ts`:
-```typescript
-import { LoginUseCase } from './login.use-case';
-import { User } from '../domain/user.entity';
-import { Role } from '../domain/role.enum';
-import { UserRepository } from '../domain/user.repository';
-import { PasswordHasher } from '../domain/password-hasher';
-import { TokenIssuer } from '../domain/token-issuer';
+가짜 repo/해셔/토큰발급기로 검증: ① 이메일·비밀번호가 맞으면 토큰 발급(`accessToken` = `token-for-<sub>`). ② 없는 이메일이면 `'invalid credentials'`. ③ 비밀번호 불일치도 `'invalid credentials'`(동일 메시지).
 
-const existing = User.reconstitute({
-  id: 'u1', email: 'a@test.com', name: '길동',
-  passwordHash: 'hashed:pw123456', role: Role.OWNER,
-});
-const repo: UserRepository = {
-  findByEmail: async (email) => (email === 'a@test.com' ? existing : null),
-  save: async (u) => u,
-};
-const hasher: PasswordHasher = {
-  hash: async (p) => `hashed:${p}`,
-  compare: async (p, h) => h === `hashed:${p}`,
-};
-const tokenIssuer: TokenIssuer = { issue: async (p) => `token-for-${p.sub}` };
-
-describe('LoginUseCase', () => {
-  it('이메일·비밀번호가 맞으면 토큰 발급', async () => {
-    const useCase = new LoginUseCase(repo, hasher, tokenIssuer);
-    const result = await useCase.execute({ email: 'a@test.com', password: 'pw123456' });
-    expect(result.accessToken).toBe('token-for-u1');
-  });
-
-  it('없는 이메일이면 Unauthorized', async () => {
-    const useCase = new LoginUseCase(repo, hasher, tokenIssuer);
-    await expect(useCase.execute({ email: 'none@test.com', password: 'x' })).rejects.toThrow('invalid credentials');
-  });
-
-  it('비밀번호가 틀리면 Unauthorized', async () => {
-    const useCase = new LoginUseCase(repo, hasher, tokenIssuer);
-    await expect(useCase.execute({ email: 'a@test.com', password: 'wrong' })).rejects.toThrow('invalid credentials');
-  });
-});
-```
-
-- [ ] **Step 2: 테스트 실패 확인**
-
-Run: `npx jest src/auth/application/login.use-case.spec.ts`
-Expected: FAIL — module 없음.
+- [ ] **Step 2: 테스트 실패 확인** — Run: `npx jest src/auth/application/login.use-case.spec.ts` → FAIL.
 
 - [ ] **Step 3: `login.use-case.ts` 작성**
 
-```typescript
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { USER_REPOSITORY, UserRepository } from '../domain/user.repository';
-import { PASSWORD_HASHER, PasswordHasher } from '../domain/password-hasher';
-import { TOKEN_ISSUER, TokenIssuer } from '../domain/token-issuer';
+`@Injectable() LoginUseCase`, `@Inject` repo·hasher·tokenIssuer. `execute({email,password})`: 유저 없거나 비번 불일치면 `UnauthorizedException('invalid credentials')`(같은 메시지), 통과 시 `tokenIssuer.issue({sub:user.id, email, role})` → `{ accessToken }`.
 
-export interface LoginInput {
-  email: string;
-  password: string;
-}
+> **보안 메모(스펙 6절):** 존재하지 않는 이메일과 비밀번호 불일치를 **같은 메시지**로 처리해 이메일 존재 여부가 새지 않게 한다.
 
-@Injectable()
-export class LoginUseCase {
-  constructor(
-    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
-    @Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasher,
-    @Inject(TOKEN_ISSUER) private readonly tokenIssuer: TokenIssuer,
-  ) {}
-
-  async execute(input: LoginInput): Promise<{ accessToken: string }> {
-    const user = await this.users.findByEmail(input.email);
-    if (!user) throw new UnauthorizedException('invalid credentials');
-    const ok = await this.hasher.compare(input.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('invalid credentials');
-    const accessToken = await this.tokenIssuer.issue({
-      sub: user.id!,
-      email: user.email,
-      role: user.role,
-    });
-    return { accessToken };
-  }
-}
-```
-
-> **보안 메모(스펙 6절):** 존재하지 않는 이메일과 비밀번호 불일치를 **같은 메시지("invalid credentials")** 로 처리해 이메일 존재 여부가 새지 않게 한다.
-
-- [ ] **Step 4: 테스트 통과 확인**
-
-Run: `npx jest src/auth/application/login.use-case.spec.ts`
-Expected: PASS (3 passed).
+- [ ] **Step 4: 테스트 통과 확인** — Run 동일 → PASS (3 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -791,231 +321,53 @@ git commit -m "feat(m0): LoginUseCase issuing JWT, opaque auth errors"
 
 ## Task 8: 인터페이스 레이어 (DTO·JWT 전략·가드·컨트롤러) + 모듈 조립
 
-**Files:**
-- Create: `src/auth/interface/dto/sign-up.dto.ts`
-- Create: `src/auth/interface/dto/login.dto.ts`
-- Create: `src/auth/interface/jwt.strategy.ts`
-- Create: `src/auth/interface/jwt-auth.guard.ts`
-- Create: `src/auth/interface/current-user.decorator.ts`
-- Create: `src/auth/interface/auth.controller.ts`
-- Create: `src/auth/auth.module.ts`
-- Modify: `src/app.module.ts`
-- Modify: `src/main.ts`
+**Files:** Create `dto/sign-up.dto.ts`, `dto/login.dto.ts`, `jwt.strategy.ts`, `jwt-auth.guard.ts`, `current-user.decorator.ts`, `auth.controller.ts` (모두 `src/auth/interface/`), `src/auth/auth.module.ts`. Modify `src/app.module.ts`, `src/main.ts`.
 
 - [ ] **Step 1: DTO 2종 작성**
 
-`src/auth/interface/dto/sign-up.dto.ts`:
-```typescript
-import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
-
-export class SignUpDto {
-  @IsEmail()
-  email: string;
-
-  @IsNotEmpty()
-  name: string;
-
-  @MinLength(8)
-  password: string;
-}
-```
-
-`src/auth/interface/dto/login.dto.ts`:
-```typescript
-import { IsEmail, IsNotEmpty } from 'class-validator';
-
-export class LoginDto {
-  @IsEmail()
-  email: string;
-
-  @IsNotEmpty()
-  password: string;
-}
-```
+`SignUpDto`(`@IsEmail email`, `@IsNotEmpty name`, `@MinLength(8) password`), `LoginDto`(`@IsEmail email`, `@IsNotEmpty password`).
 
 - [ ] **Step 2: JWT 전략 작성**
 
-`src/auth/interface/jwt.strategy.ts`:
-```typescript
-import { Injectable } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
-import { TokenPayload } from '../domain/token-issuer';
+`JwtStrategy extends PassportStrategy(Strategy)` — Bearer 추출, `ignoreExpiration:false`, `secretOrKey`는 `config.getOrThrow('JWT_SECRET')`. `validate(payload)`는 `TokenPayload` 그대로 반환(→ `request.user`).
 
-@Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
-    super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
-    });
-  }
+- [ ] **Step 3: 가드 + `@CurrentUser` 데코레이터 작성**
 
-  validate(payload: TokenPayload): TokenPayload {
-    return payload;
-  }
-}
-```
-
-- [ ] **Step 3: 가드 + @CurrentUser 데코레이터 작성**
-
-`src/auth/interface/jwt-auth.guard.ts`:
-```typescript
-import { Injectable } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-
-@Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {}
-```
-
-`src/auth/interface/current-user.decorator.ts`:
-```typescript
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { TokenPayload } from '../domain/token-issuer';
-
-export const CurrentUser = createParamDecorator(
-  (_data: unknown, ctx: ExecutionContext): TokenPayload => {
-    return ctx.switchToHttp().getRequest().user;
-  },
-);
-```
+`JwtAuthGuard extends AuthGuard('jwt')`. `CurrentUser` 파라미터 데코레이터는 `request.user`(TokenPayload)를 반환(`getRequest<{ user: TokenPayload }>()`로 타입 지정).
 
 - [ ] **Step 4: 컨트롤러 작성 (`/auth/signup`, `/auth/login`, `/auth/me`)**
 
-`src/auth/interface/auth.controller.ts`:
-```typescript
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { SignUpUseCase } from '../application/sign-up.use-case';
-import { LoginUseCase } from '../application/login.use-case';
-import { SignUpDto } from './dto/sign-up.dto';
-import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { CurrentUser } from './current-user.decorator';
-import { TokenPayload } from '../domain/token-issuer';
-
-@Controller('auth')
-export class AuthController {
-  constructor(
-    private readonly signUp: SignUpUseCase,
-    private readonly login: LoginUseCase,
-  ) {}
-
-  @Post('signup')
-  async signup(@Body() dto: SignUpDto) {
-    const user = await this.signUp.execute(dto);
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
-  }
-
-  @Post('login')
-  loginHandler(@Body() dto: LoginDto) {
-    return this.login.execute(dto);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  me(@CurrentUser() user: TokenPayload) {
-    return { id: user.sub, email: user.email, role: user.role };
-  }
-}
-```
+`@Controller('auth') AuthController`, `SignUpUseCase`·`LoginUseCase` 주입.
+- `POST signup` → 유저 생성 후 `{id,email,name,role}` 반환.
+- `POST login` → `{accessToken}` 반환.
+- `GET me` (`@UseGuards(JwtAuthGuard)`, `@CurrentUser()`) → `{id:sub, email, role}`.
 
 - [ ] **Step 5: `auth.module.ts` 작성 (DI 바인딩 = 의존성 역전 지점)**
 
-`src/auth/auth.module.ts`:
-```typescript
-import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { AuthController } from './interface/auth.controller';
-import { JwtStrategy } from './interface/jwt.strategy';
-import { SignUpUseCase } from './application/sign-up.use-case';
-import { LoginUseCase } from './application/login.use-case';
-import { USER_REPOSITORY } from './domain/user.repository';
-import { PASSWORD_HASHER } from './domain/password-hasher';
-import { TOKEN_ISSUER } from './domain/token-issuer';
-import { PrismaUserRepository } from './infrastructure/prisma-user.repository';
-import { BcryptPasswordHasher } from './infrastructure/bcrypt-password-hasher';
-import { JwtTokenService } from './infrastructure/jwt-token.service';
+`imports`: `PassportModule`, `JwtModule.registerAsync`(secret=`getOrThrow('JWT_SECRET')`, `signOptions.expiresIn`=`JWT_EXPIRES_IN` 기본 `1h` — 타입은 `as JwtSignOptions`). `controllers`: `AuthController`. `providers`: `SignUpUseCase`·`LoginUseCase`·`JwtStrategy` + 토큰→구현 바인딩(`USER_REPOSITORY`→`PrismaUserRepository`, `PASSWORD_HASHER`→`BcryptPasswordHasher`, `TOKEN_ISSUER`→`JwtTokenService`).
 
-@Module({
-  imports: [
-    PassportModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN', '1h') },
-      }),
-    }),
-  ],
-  controllers: [AuthController],
-  providers: [
-    SignUpUseCase,
-    LoginUseCase,
-    JwtStrategy,
-    { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
-    { provide: PASSWORD_HASHER, useClass: BcryptPasswordHasher },
-    { provide: TOKEN_ISSUER, useClass: JwtTokenService },
-  ],
-})
-export class AuthModule {}
-```
+- [ ] **Step 6: `src/app.module.ts` 수정**
 
-- [ ] **Step 6: `src/app.module.ts` 수정 (ConfigModule·Prisma·Auth 등록, 기본 컨트롤러 제거)**
-
-`src/app.module.ts` 전체를 다음으로 교체:
-```typescript
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from './prisma/prisma.module';
-import { AuthModule } from './auth/auth.module';
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    PrismaModule,
-    AuthModule,
-  ],
-})
-export class AppModule {}
-```
+`ConfigModule.forRoot({isGlobal:true})`, `PrismaModule`, `AuthModule`만 imports. 기본 컨트롤러/서비스 제거.
 
 - [ ] **Step 7: 기본 스타터 파일 제거 (사용 안 함)**
 
 > 스타터 e2e(`test/app.e2e-spec.ts`)는 `GET / → "Hello World!"`를 검증하므로, AppController 삭제와 함께 제거해야 `npm run test:e2e`가 깨지지 않는다(Task 9의 `auth.e2e-spec.ts`로 대체).
 
-Run:
 ```bash
 git rm src/app.controller.ts src/app.controller.spec.ts src/app.service.ts test/app.e2e-spec.ts
 ```
 
 - [ ] **Step 8: `src/main.ts` 수정 (전역 ValidationPipe)**
 
-`src/main.ts` 전체를 다음으로 교체:
-```typescript
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
-
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  await app.listen(process.env.PORT ?? 3000);
-}
-bootstrap();
-```
+`NestFactory.create` 후 `app.useGlobalPipes(new ValidationPipe({ whitelist:true, transform:true }))`, 포트 listen. floating promise 회피로 `void bootstrap()`.
 
 - [ ] **Step 9: 빌드 + 단위 테스트 전체 통과 확인**
 
-Run:
 ```bash
 npx tsc --noEmit && npx jest
 ```
-Expected: 컴파일 에러 없음, 기존 단위 테스트(엔티티·해셔·유스케이스) 전부 PASS.
+Expected: 컴파일 에러 없음, 단위 테스트(엔티티·해셔·유스케이스) 전부 PASS.
 
 - [ ] **Step 10: Commit**
 
@@ -1028,81 +380,21 @@ git commit -m "feat(m0): auth interface layer (auth controller, JWT strategy/gua
 
 ## Task 9: 회원가입→로그인→인증 조회 e2e
 
-**Files:**
-- Create: `test/auth.e2e-spec.ts`
+**Files:** Create `test/auth.e2e-spec.ts`.
 
-> **선행:** `docker compose up -d`로 Postgres가 떠 있고 마이그레이션이 적용된 상태. e2e는 실제 DB에 쓰므로 매 실행 전 해당 유저를 정리한다.
+> **선행:** `docker compose up -d`로 Postgres가 떠 있고 마이그레이션이 적용된 상태. e2e는 실제 DB에 쓰므로 매 실행 전후 해당 유저를 정리한다.
 
 - [ ] **Step 1: 실패 e2e 테스트 작성**
 
-`test/auth.e2e-spec.ts`:
-```typescript
-import { Test } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+`AppModule` 부팅 + 전역 ValidationPipe. 검증: ① `signup → login → me` 전체 흐름(signup 201·role TENANT, login 201·accessToken 문자열, me 200·email 일치). ② 토큰 없이 `/auth/me` → 401. ③ 짧은 비밀번호 signup → 400. ④ 이미 가입된 이메일 재signup → 409(리뷰 반영). `afterAll`에서 테스트 이메일 정리. (supertest 타입은 `getHttpServer() as App`, `res.body as {...}`로 캐스팅해 eslint no-unsafe-* 회피.)
 
-describe('Auth (e2e)', () => {
-  let app: INestApplication;
-  let prisma: PrismaService;
-  const email = `e2e_${Date.now()}@test.com`;
+- [ ] **Step 2: 인프라 확인 후 e2e 실행**
 
-  beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-    prisma = app.get(PrismaService);
-    await app.init();
-  });
-
-  afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } });
-    await app.close();
-  });
-
-  it('signup → login → me 전체 흐름', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ email, name: '길동', password: 'pw123456' })
-      .expect(201)
-      .expect((res) => expect(res.body.role).toBe('TENANT'));
-
-    const login = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email, password: 'pw123456' })
-      .expect(201);
-    const token = login.body.accessToken;
-    expect(typeof token).toBe('string');
-
-    await request(app.getHttpServer())
-      .get('/auth/me')
-      .set('Authorization', `Bearer ${token}`)
-      .expect(200)
-      .expect((res) => expect(res.body.email).toBe(email));
-  });
-
-  it('토큰 없이 /auth/me는 401', async () => {
-    await request(app.getHttpServer()).get('/auth/me').expect(401);
-  });
-
-  it('짧은 비밀번호 signup은 400', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ email: `short_${Date.now()}@test.com`, name: 'x', password: 'short' })
-      .expect(400);
-  });
-});
-```
-
-- [ ] **Step 2: 인프라 확인 후 e2e 실행 (실패 가능성 점검)**
-
-Run:
 ```bash
 docker compose up -d
 npx jest --config ./test/jest-e2e.json
 ```
-Expected: 처음 실행에서 통과해야 함. 만약 401/연결 에러가 나면 `.env`의 `DATABASE_URL`·`JWT_SECRET`과 마이그레이션 적용 여부를 점검.
+Expected: 통과. 401/연결 에러 시 `.env`의 `DATABASE_URL`·`JWT_SECRET`과 마이그레이션 적용 여부 점검.
 
 - [ ] **Step 3: Commit**
 
@@ -1115,30 +407,20 @@ git commit -m "test(m0): auth e2e (signup/login/me, 401, validation)"
 
 ## Task 10: M0 마무리 검증 & README 상태 갱신
 
-**Files:**
-- Modify: `README.md` (M0 상태 표시)
+**Files:** Modify `README.md`.
 
 - [ ] **Step 1: 전체 검증 (lint·단위·e2e)**
 
-Run:
 ```bash
 npm run lint && npx jest && npx jest --config ./test/jest-e2e.json
 ```
-Expected: lint 통과, 모든 단위·e2e PASS.
+Expected: lint 0 errors, 모든 단위·e2e PASS.
 
 - [ ] **Step 2: 수동 동작 확인 (서버 기동 후 curl)**
 
-Run:
-```bash
-npm run start:dev   # 별도 터미널
-curl -s -X POST localhost:3000/auth/signup -H 'Content-Type: application/json' -d '{"email":"owner@test.com","name":"건물주","password":"pw123456"}'
-curl -s -X POST localhost:3000/auth/login  -H 'Content-Type: application/json' -d '{"email":"owner@test.com","password":"pw123456"}'
-```
-Expected: signup은 유저 JSON, login은 `{"accessToken":"..."}`.
+`npm run start:dev` 후 `POST /auth/signup`(유저 JSON 반환), `POST /auth/login`(`{accessToken}` 반환) 확인.
 
-- [ ] **Step 3: README M0 상태 한 줄 갱신**
-
-`README.md`의 마일스톤 표 M0 행 끝에 ✅ 표기를 추가(예: `| **M0** | ... | Prisma 기초·마이그레이션 ✅ |`).
+- [ ] **Step 3: README M0 상태 한 줄 갱신** — 마일스톤 표 M0 행에 ✅ 표기 추가.
 
 - [ ] **Step 4: Commit**
 
@@ -1163,6 +445,6 @@ git commit -m "docs(m0): mark M0 complete in milestone table"
 
 ## Self-Review 결과
 
-- **스펙 커버리지:** M0 스펙("docker-compose + Prisma 초기 스키마 + Auth(JWT)", 검증="회원가입/로그인 동작, 마이그레이션 적용됨") → Task 1·2(인프라), Task 3(Prisma/마이그레이션), Task 4~9(인증) 으로 전부 커버. 스펙 5.2 레이어 구조(interface/application/domain/infrastructure)와 의존성 역전 → 디렉터리·DI 바인딩으로 반영. 보안 6절(인증 오류 불투명화, 민감정보 env) 반영.
+- **스펙 커버리지:** M0 스펙("docker-compose + Prisma 초기 스키마 + Auth(JWT)", 검증="회원가입/로그인 동작, 마이그레이션 적용됨") → Task 1·2(인프라), Task 3(Prisma/마이그레이션), Task 4~9(인증)으로 전부 커버. 스펙 5.2 레이어 구조와 의존성 역전 → 디렉터리·DI 바인딩으로 반영. 보안 6절(인증 오류 불투명화, 민감정보 env) 반영.
 - **범위 외(의도적):** RolesGuard(RBAC 가드)는 역할 기반 인가가 실제로 필요한 M1에서 도입. M0는 Role enum 정의 + JWT 인증까지만.
-- **타입 일관성:** `TokenPayload{sub,email,role}`가 발급(JwtTokenService)·검증(JwtStrategy)·소비(@CurrentUser, /me)에서 동일. `User.reconstitute`/`User.create` 시그니처가 repo·use-case·test에서 일치. `accessToken` 키가 LoginUseCase·e2e에서 일치.
+- **타입 일관성:** `TokenPayload{sub,email,role}`가 발급·검증·소비에서 동일. `User.reconstitute`/`User.create` 시그니처가 repo·use-case·test에서 일치. `accessToken` 키가 LoginUseCase·e2e에서 일치.
