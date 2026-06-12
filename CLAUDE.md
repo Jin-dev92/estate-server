@@ -4,6 +4,19 @@ NestJS 기반 백엔드 서버.
 
 ---
 
+## 코드 컨벤션
+
+### 매직 스트링·하드코딩 금지 → 중앙 상수 참조
+
+- **환경설정(env) 키는 문자열로 하드코딩하지 않는다.** `config.get/getOrThrow` 호출 시 `src/config/config-keys.ts`의 `ConfigKey` (`const enum`) 를 참조한다.
+  - ✅ `config.getOrThrow<string>(ConfigKey.JwtSecret)`
+  - ❌ `config.getOrThrow<string>('JWT_SECRET')`
+  - 새 env 키를 추가할 때는 `.env.example`과 `ConfigKey`에 함께 등록한다.
+- 같은 원칙을 **반복되는 매직 스트링 전반**(Redis 키 prefix, 토픽명, 메타데이터 키 등)에 적용한다 — 의미 있는 상수/enum으로 추출해 오타를 컴파일 타임에 잡고 단일 출처로 관리한다.
+- `const enum`은 빌드(tsc)에서 값이 인라인되므로 런타임 비용이 없다. 단, 빌더를 SWC로 바꾸면 cross-module `const enum` 인라인이 깨질 수 있으니 그 시점엔 일반 `enum`/`as const`로 전환한다.
+
+---
+
 ## NestJS Test Code Rules
 
 > 출처: iCloud `claude/docs/nestjs-test-rules.md`
@@ -85,6 +98,8 @@ function createMockUser(overrides?: Partial<User>): User {
 - 특정 provider만 교체할 때는 `overrideProvider` 활용
 - 통합 테스트에서 실제 DB 연결 시 테스트 전용 DB 사용
 - 해당 프로젝트는 공부용 이기 때문에 설명이 필요한 부분은 주석을 달 것.
+- 정말 필요한 경우가 아니라면 하드코딩 금지
+  - 대신 const enum 을 사용할 것
 
 ### git
 - 커밋 메시지
