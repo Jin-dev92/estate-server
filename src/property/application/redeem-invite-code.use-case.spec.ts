@@ -42,7 +42,10 @@ class CapturingLeaseRepo implements LeaseRepository {
 describe('RedeemInviteCodeUseCase', () => {
   it('유효한 코드면 입주자를 호실에 연결하는 Lease(ACTIVE)를 만든다', async () => {
     const leaseRepo = new CapturingLeaseRepo();
-    const useCase = new RedeemInviteCodeUseCase(new FakeInviteStore(), leaseRepo);
+    const useCase = new RedeemInviteCodeUseCase(
+      new FakeInviteStore(),
+      leaseRepo,
+    );
 
     const lease = await useCase.execute({ tenantId: TENANT_ID, code: 'GOOD' });
 

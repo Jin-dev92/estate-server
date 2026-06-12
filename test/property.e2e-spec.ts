@@ -52,7 +52,9 @@ describe('Property (e2e)', () => {
 
   afterAll(async () => {
     // FK 순서: Lease → Unit → Building → User
-    const owner = await prisma.user.findUnique({ where: { email: ownerEmail } });
+    const owner = await prisma.user.findUnique({
+      where: { email: ownerEmail },
+    });
     if (owner) {
       const buildings = await prisma.building.findMany({
         where: { ownerId: owner.id },
@@ -133,7 +135,9 @@ describe('Property (e2e)', () => {
   });
 
   it('다른 소유자의 건물에 호실 생성 시도 → 403 (소유권 검사)', async () => {
-    const owner = await prisma.user.findUnique({ where: { email: ownerEmail } });
+    const owner = await prisma.user.findUnique({
+      where: { email: ownerEmail },
+    });
     const someBuilding = await prisma.building.findFirst({
       where: { ownerId: owner!.id },
       select: { id: true },

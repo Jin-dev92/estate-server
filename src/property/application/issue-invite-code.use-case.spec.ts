@@ -67,7 +67,10 @@ describe('IssueInviteCodeUseCase', () => {
       store,
     );
 
-    const result = await useCase.execute({ ownerId: OWNER_ID, unitId: UNIT_ID });
+    const result = await useCase.execute({
+      ownerId: OWNER_ID,
+      unitId: UNIT_ID,
+    });
 
     expect(result.code).toBe('CODE123');
     expect(store.lastPayload).toEqual({ unitId: UNIT_ID, issuedBy: OWNER_ID });
