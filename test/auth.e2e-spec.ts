@@ -9,6 +9,7 @@ describe('Auth (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   const email = `e2e_${Date.now()}@test.com`;
+  const dupEmail = `dup_${Date.now()}@test.com`;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -23,7 +24,9 @@ describe('Auth (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } });
+    await prisma.user.deleteMany({
+      where: { email: { in: [email, dupEmail] } },
+    });
     await app.close();
   });
 
@@ -67,5 +70,17 @@ describe('Auth (e2e)', () => {
         password: 'short',
       })
       .expect(400);
+  });
+
+  it('이미 가입된 이메일로 다시 signup하면 409', async () => {
+    await request(app.getHttpServer() as App)
+      .post('/auth/signup')
+      .send({ email: dupEmail, name: '길동', password: 'pw123456' })
+      .expect(201);
+
+    await request(app.getHttpServer() as App)
+      .post('/auth/signup')
+      .send({ email: dupEmail, name: '철수', password: 'pw123456' })
+      .expect(409);
   });
 });
