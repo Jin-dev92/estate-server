@@ -135,7 +135,7 @@
 
 | 단계 | 내용 | 학습 포커스 |
 |---|---|---|
-| **M0** | docker-compose(PG·Redis·Kafka) + Prisma 스키마 + Auth(JWT) | Prisma 기초·마이그레이션 |
+| **M0** ✅ | docker-compose(PG·Redis·Kafka) + Prisma 스키마 + Auth(JWT) | Prisma 기초·마이그레이션 |
 | **M1** | 건물/호실/입주 + 초대코드(Redis TTL) | Prisma 관계, Redis TTL |
 | **M2** | 게시판 CRUD + Redis 캐싱 | 캐시 무효화 패턴 |
 | **M3** | Kafka 도입 + audit-worker | producer/consumer 첫걸음 |
