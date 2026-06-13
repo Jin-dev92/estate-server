@@ -37,4 +37,59 @@ describe('Swagger (e2e)', () => {
         expect(Object.keys(body.paths).length).toBeGreaterThan(0);
       });
   });
+
+  it('태그 auth/property/board 가 문서에 존재한다', async () => {
+    await request(app.getHttpServer() as App)
+      .get('/docs-json')
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as { tags: { name: string }[] };
+        const names = body.tags.map((tag) => tag.name);
+        expect(names).toEqual(
+          expect.arrayContaining(['auth', 'property', 'board']),
+        );
+      });
+  });
+
+  it('PostCategory enum 이 NOTICE/FREE 명명 스키마로 노출된다', async () => {
+    await request(app.getHttpServer() as App)
+      .get('/docs-json')
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as {
+          components: { schemas: Record<string, { enum?: string[] }> };
+        };
+        const postCategory = body.components.schemas.PostCategory;
+        expect(postCategory.enum).toEqual(
+          expect.arrayContaining(['NOTICE', 'FREE']),
+        );
+      });
+  });
+
+  it('ErrorResponseDto 스키마가 code 필드를 포함한다', async () => {
+    await request(app.getHttpServer() as App)
+      .get('/docs-json')
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as {
+          components: {
+            schemas: Record<string, { properties?: Record<string, unknown> }>;
+          };
+        };
+        const errorResponse = body.components.schemas.ErrorResponseDto;
+        expect(errorResponse.properties).toHaveProperty('code');
+      });
+  });
+
+  it('Bearer 보안 스킴(access-token) 이 등록된다', async () => {
+    await request(app.getHttpServer() as App)
+      .get('/docs-json')
+      .expect(200)
+      .expect((res) => {
+        const body = res.body as {
+          components: { securitySchemes: Record<string, unknown> };
+        };
+        expect(body.components.securitySchemes).toHaveProperty('access-token');
+      });
+  });
 });
