@@ -70,10 +70,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
   }
 
+  // 잘 알려진 HTTP status → 공통 코드 매핑. status를 enum과 직접 비교(===)하면
+  // no-unsafe-enum-comparison이 걸리므로, enum을 계산된 키로 쓰는 룩업 맵으로 처리한다.
+  private static readonly STATUS_CODE_MAP: Record<number, string> = {
+    [HttpStatus.BAD_REQUEST]: 'COMMON_VALIDATION_FAILED',
+    [HttpStatus.UNAUTHORIZED]: 'COMMON_UNAUTHORIZED',
+  };
+
   private deriveCode(status: number): string {
-    if (status === HttpStatus.BAD_REQUEST) return 'COMMON_VALIDATION_FAILED';
-    if (status === HttpStatus.UNAUTHORIZED) return 'COMMON_UNAUTHORIZED';
-    return `HTTP_${status}`;
+    return AllExceptionsFilter.STATUS_CODE_MAP[status] ?? `HTTP_${status}`;
   }
 
   private extractMessage(exception: HttpException): string {
