@@ -21,11 +21,14 @@ model User {
   role         Role     @default(TENANT)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
 
   buildings Building[]
   leases    Lease[]
   posts     Post[]
   comments  Comment[]
+
+  @@index([deletedAt])
 }
 
 enum LeaseStatus {
@@ -40,6 +43,7 @@ model Building {
   name      String
   address   String
   createdAt DateTime @default(now())
+  deletedAt DateTime?
 
   units Unit[]
   posts Post[]
@@ -52,6 +56,7 @@ model Unit {
   name       String
   floor      Int
   createdAt  DateTime @default(now())
+  deletedAt  DateTime?
 
   leases Lease[]
 }
@@ -84,16 +89,20 @@ model Post {
   content    String
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
+  deletedAt  DateTime?
 
   comments Comment[]
+
+  @@index([buildingId, deletedAt])
 }
 
 model Comment {
   id        String   @id @default(cuid())
   postId    String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id])
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
   content   String
   createdAt DateTime @default(now())
+  deletedAt DateTime?
 }
