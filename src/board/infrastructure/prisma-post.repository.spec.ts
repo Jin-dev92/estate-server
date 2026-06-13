@@ -84,11 +84,11 @@ describe('PrismaPostRepository', () => {
 
       expect(prisma.comment.updateMany).toHaveBeenCalledWith({
         where: { postId: POST_ID, deletedAt: null },
-        data: { deletedAt: expect.any(Date) },
+        data: { deletedAt: expect.any(Date) as Date },
       });
       expect(prisma.post.update).toHaveBeenCalledWith({
         where: { id: POST_ID },
-        data: { deletedAt: expect.any(Date) },
+        data: { deletedAt: expect.any(Date) as Date },
       });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
