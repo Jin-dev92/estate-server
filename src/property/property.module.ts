@@ -6,6 +6,7 @@ import { IssueInviteCodeUseCase } from './application/issue-invite-code.use-case
 import { RedeemInviteCodeUseCase } from './application/redeem-invite-code.use-case';
 import { ListMyBuildingsUseCase } from './application/list-my-buildings.use-case';
 import { ListMyLeasesUseCase } from './application/list-my-leases.use-case';
+import { EndLeaseUseCase } from './application/end-lease.use-case';
 import { BUILDING_REPOSITORY } from './domain/building.repository';
 import { UNIT_REPOSITORY } from './domain/unit.repository';
 import { LEASE_REPOSITORY } from './domain/lease.repository';
@@ -24,6 +25,7 @@ import { RedisInviteCodeStore } from './infrastructure/redis-invite-code.store';
     RedeemInviteCodeUseCase,
     ListMyBuildingsUseCase,
     ListMyLeasesUseCase,
+    EndLeaseUseCase,
     { provide: BUILDING_REPOSITORY, useClass: PrismaBuildingRepository },
     { provide: UNIT_REPOSITORY, useClass: PrismaUnitRepository },
     { provide: LEASE_REPOSITORY, useClass: PrismaLeaseRepository },
