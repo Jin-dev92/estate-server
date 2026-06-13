@@ -6,6 +6,10 @@ import { PostRepository } from '../domain/post.repository';
 import { CommentRepository } from '../domain/comment.repository';
 import { BoardCache } from './board-cache';
 import { MembershipChecker } from './membership';
+import { EventPublisher } from '../../events/event-publisher';
+
+// 이벤트 발행 부수효과는 이 스펙의 관심사가 아니므로 no-op mock 사용
+const events: EventPublisher = { publish: () => Promise.resolve() };
 
 const POST_ID = 'p1';
 const BUILDING_ID = 'b1';
@@ -78,6 +82,7 @@ describe('CreateCommentUseCase', () => {
       postRepoWith(samplePost),
       cache,
       membershipReturning(true),
+      events,
     );
 
     const comment = await useCase.execute({
@@ -96,6 +101,7 @@ describe('CreateCommentUseCase', () => {
       postRepoWith(null),
       new SpyCache(),
       membershipReturning(true),
+      events,
     );
 
     await expect(
@@ -109,6 +115,7 @@ describe('CreateCommentUseCase', () => {
       postRepoWith(samplePost),
       new SpyCache(),
       membershipReturning(false),
+      events,
     );
 
     await expect(
