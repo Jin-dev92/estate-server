@@ -95,7 +95,7 @@
 
 ## 5. 주요 설계 결정·트레이드오프
 
-이 프로젝트의 모든 설계는 "왜 그렇게 했는가"를 근거와 트레이드오프로 남겼습니다. 핵심 결정 8가지를 요약합니다. *(각 결정의 더 깊은 맥락과 대안 비교는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.)*
+이 프로젝트의 모든 설계는 "왜 그렇게 했는가"를 근거와 트레이드오프로 남겼습니다. 핵심 결정 9가지를 요약합니다. *(각 결정의 더 깊은 맥락과 대안 비교는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.)*
 
 **1. 도메인을 `건물 → 호실 → 입주` 3계층으로**
 - *근거:* 호실 단위 점유·소통("특정 호실 입주자에게만 보이는 공지")을 표현할 수 있다. 2계층은 이 구분이 사라지고, 일반 Workspace 추상화는 건물주 도메인의 의미가 흐려진다.
@@ -128,6 +128,15 @@
 **8. DB-레벨 RLS 대신 앱 계층 인가(가드)**
 - *근거:* Supabase가 아니라 Prisma+Postgres 직접 사용이라 DB RLS는 비적용. **RBAC + 리소스 소유권 검사**로 동등한 보장을 구현한다.
 - *트레이드오프:* 가드 누락이 곧 보안 구멍 → 설계·구현 시 "다른 건물 데이터 접근 우회 경로"를 명시적으로 점검한다.
+
+**9. 논리삭제(soft delete): 5개 엔티티에 `deletedAt`, Lease는 제외**
+- *근거:* "실수로 지운 글 복구"(데이터 복구)와 "부모 삭제 시 하위 이력 보존"(참조 무결성)이 동기. `User·Building·Unit·Post·Comment`에 nullable `deletedAt`을 두고, repository 조회에 `deletedAt: null` 필터를 캡슐화한다(도메인·유스케이스는 soft delete를 모름). `Lease`는 이미 `status(ACTIVE/ENDED)`로 "종료"라는 도메인 상태를 표현하므로 의미 중복을 피해 제외한다.
+- *트레이드오프:* 물리삭제가 사라지면서 `Comment`의 DB `onDelete: Cascade`가 무의미 → **Post soft delete 시 자식 Comment를 같은 트랜잭션에서 애플리케이션 레벨로 함께 soft delete**한다.
+
+> **알려진 이슈 / 한계** *(soft delete 도입에 따른 미해결 사항 — 위 결정 9의 후속)*
+> - **`User.email @unique` 충돌:** soft delete된 유저가 이메일을 계속 점유해 같은 이메일 재가입이 막힌다. **현재 User 삭제 유스케이스가 없어** 당장은 문제되지 않으며, 향후 User 삭제를 도입할 때 복합 unique(`email + deletedAt`)나 이메일 마스킹을 검토한다.
+> - **복구(restore) 미구현:** 스키마(`deletedAt`)는 복구가 가능하도록 준비하지만, 도메인 `restore()`/복구 유스케이스는 이번 범위 밖이다.
+> - **조회 필터 누락 위험:** 접근 A(repository 수동 필터링)의 트레이드오프로, 새 조회 메서드를 추가할 때 `deletedAt: null`을 빠뜨릴 수 있다. 빈도가 높아지면 Prisma Client Extension(자동 필터링)으로 전환을 검토한다.
 
 ---
 

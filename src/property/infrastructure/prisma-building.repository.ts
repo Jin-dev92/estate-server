@@ -24,7 +24,9 @@ export class PrismaBuildingRepository implements BuildingRepository {
   }
 
   async findById(id: string): Promise<Building | null> {
-    const row = await this.prisma.building.findUnique({ where: { id } });
+    const row = await this.prisma.building.findFirst({
+      where: { id, deletedAt: null },
+    });
     if (!row) return null;
     return Building.reconstitute({
       id: row.id,
@@ -35,7 +37,9 @@ export class PrismaBuildingRepository implements BuildingRepository {
   }
 
   async findByOwner(ownerId: string): Promise<Building[]> {
-    const rows = await this.prisma.building.findMany({ where: { ownerId } });
+    const rows = await this.prisma.building.findMany({
+      where: { ownerId, deletedAt: null },
+    });
     return rows.map((row) =>
       Building.reconstitute({
         id: row.id,
