@@ -1,4 +1,11 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/interface/jwt-auth.guard';
 import { RolesGuard } from '../../auth/interface/roles.guard';
 import { Roles } from '../../auth/interface/roles.decorator';
@@ -14,7 +21,12 @@ import { ListMyLeasesUseCase } from '../application/list-my-leases.use-case';
 import { CreateBuildingDto } from './dto/create-building.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { RedeemInviteDto } from './dto/redeem-invite.dto';
+import { ErrorResponseDto } from '../../common/errors/error-response.dto';
+import { SWAGGER_BEARER_AUTH } from '../../common/swagger/swagger.constants';
 
+@ApiTags('property')
+// 모든 라우트가 JwtAuthGuard 로 보호되므로 클래스 레벨에 한 번만 선언한다.
+@ApiBearerAuth(SWAGGER_BEARER_AUTH)
 @Controller()
 export class PropertyController {
   constructor(
@@ -29,6 +41,13 @@ export class PropertyController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER)
   @Post('buildings')
+  @ApiOperation({ summary: '건물 생성(OWNER 전용)' })
+  @ApiResponse({ status: 201, description: '생성된 건물' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'OWNER 권한 없음',
+  })
   async createBuildingHandler(
     @CurrentUser() user: TokenPayload,
     @Body() dto: CreateBuildingDto,
@@ -48,6 +67,13 @@ export class PropertyController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER)
   @Get('buildings')
+  @ApiOperation({ summary: '내 건물 목록 조회(OWNER 전용)' })
+  @ApiResponse({ status: 200, description: '내가 소유한 건물 목록' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'OWNER 권한 없음',
+  })
   async listBuildingsHandler(@CurrentUser() user: TokenPayload) {
     const buildings = await this.listMyBuildings.execute(user.sub);
     return buildings.map((b) => ({
@@ -60,6 +86,19 @@ export class PropertyController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER)
   @Post('buildings/:buildingId/units')
+  @ApiParam({ name: 'buildingId', description: '호실을 추가할 건물 ID' })
+  @ApiOperation({ summary: '호실 생성(OWNER 전용)' })
+  @ApiResponse({ status: 201, description: '생성된 호실' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'OWNER 권한 없음',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '건물 없음',
+  })
   async createUnitHandler(
     @CurrentUser() user: TokenPayload,
     @Param('buildingId') buildingId: string,
@@ -82,6 +121,19 @@ export class PropertyController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER)
   @Post('units/:unitId/invite-codes')
+  @ApiParam({ name: 'unitId', description: '초대코드를 발급할 호실 ID' })
+  @ApiOperation({ summary: '초대코드 발급(OWNER 전용)' })
+  @ApiResponse({ status: 201, description: '발급된 초대코드' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'OWNER 권한 없음',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '호실 없음',
+  })
   async issueInviteHandler(
     @CurrentUser() user: TokenPayload,
     @Param('unitId') unitId: string,
@@ -91,6 +143,16 @@ export class PropertyController {
 
   @UseGuards(JwtAuthGuard)
   @Post('invite-codes/redeem')
+  @ApiOperation({ summary: '초대코드 사용(입주)' })
+  @ApiResponse({
+    status: 201,
+    description: '생성된 임대(Lease). status ∈ ACTIVE | ENDED',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '유효하지 않거나 만료된 초대코드',
+  })
   async redeemInviteHandler(
     @CurrentUser() user: TokenPayload,
     @Body() dto: RedeemInviteDto,
@@ -104,6 +166,11 @@ export class PropertyController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me/leases')
+  @ApiOperation({ summary: '내 임대 목록 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '내 임대 목록. 각 status ∈ ACTIVE | ENDED',
+  })
   async myLeasesHandler(@CurrentUser() user: TokenPayload) {
     const leases = await this.listMyLeases.execute(user.sub);
     return leases.map((l) => ({
