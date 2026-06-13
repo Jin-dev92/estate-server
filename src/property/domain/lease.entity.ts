@@ -6,6 +6,7 @@ interface LeaseProps {
   unitId: string;
   tenantId: string;
   status: LeaseStatus;
+  endedAt: Date | null;
 }
 
 export class Lease {
@@ -19,11 +20,24 @@ export class Lease {
       unitId: input.unitId,
       tenantId: input.tenantId,
       status: LeaseStatus.ACTIVE,
+      endedAt: null,
     });
   }
 
   static reconstitute(props: LeaseProps): Lease {
     return new Lease(props);
+  }
+
+  // 계약 종료: 상태를 ENDED로, 종료 시각을 채운 새 인스턴스를 반환한다(불변 패턴).
+  end(): Lease {
+    if (this.props.status === LeaseStatus.ENDED) {
+      throw new DomainError('이미 종료된 계약입니다.');
+    }
+    return new Lease({
+      ...this.props,
+      status: LeaseStatus.ENDED,
+      endedAt: new Date(),
+    });
   }
 
   get id(): string | null {
@@ -37,5 +51,8 @@ export class Lease {
   }
   get status(): LeaseStatus {
     return this.props.status;
+  }
+  get endedAt(): Date | null {
+    return this.props.endedAt;
   }
 }

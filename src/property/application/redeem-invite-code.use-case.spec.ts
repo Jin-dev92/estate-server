@@ -38,11 +38,18 @@ class CapturingLeaseRepo implements LeaseRepository {
       unitId: lease.unitId,
       tenantId: lease.tenantId,
       status: lease.status,
+      endedAt: null,
     });
     return Promise.resolve(this.saved);
   }
   findByTenant(): Promise<Lease[]> {
     return Promise.resolve([]);
+  }
+  findById(): Promise<Lease | null> {
+    return Promise.resolve(null);
+  }
+  update(lease: Lease): Promise<Lease> {
+    return Promise.resolve(lease);
   }
 }
 
@@ -58,6 +65,7 @@ function makeEventDeps(redeemResult: InviteCodePayload | null) {
     unitId: UNIT_ID_EVT,
     tenantId: TENANT_ID_EVT,
     status: LeaseStatus.ACTIVE,
+    endedAt: null,
   });
 
   const invites: Partial<InviteCodeStore> = {
