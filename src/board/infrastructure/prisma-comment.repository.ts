@@ -25,7 +25,7 @@ export class PrismaCommentRepository implements CommentRepository {
 
   async findByPost(postId: string): Promise<Comment[]> {
     const rows = await this.prisma.comment.findMany({
-      where: { postId },
+      where: { postId, deletedAt: null },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map((row) =>

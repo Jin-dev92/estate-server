@@ -12,7 +12,10 @@ export class PrismaUserRepository implements UserRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByEmail(email: string): Promise<User | null> {
-    const row = await this.prisma.user.findUnique({ where: { email } });
+    // deletedAt: null 조건을 붙이려면 findUnique 대신 findFirst를 쓴다.
+    const row = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null },
+    });
     if (!row) return null;
     return User.reconstitute({
       id: row.id,

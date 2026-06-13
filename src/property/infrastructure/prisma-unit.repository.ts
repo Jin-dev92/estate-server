@@ -24,7 +24,10 @@ export class PrismaUnitRepository implements UnitRepository {
   }
 
   async findById(id: string): Promise<Unit | null> {
-    const row = await this.prisma.unit.findUnique({ where: { id } });
+    // deletedAt: null 조건을 붙이려면 findUnique 대신 findFirst를 쓴다.
+    const row = await this.prisma.unit.findFirst({
+      where: { id, deletedAt: null },
+    });
     if (!row) return null;
     return Unit.reconstitute({
       id: row.id,
