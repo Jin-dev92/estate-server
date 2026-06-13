@@ -40,13 +40,16 @@ export class PrismaPostRepository implements PostRepository {
   }
 
   async findById(id: string): Promise<Post | null> {
-    const row = await this.prisma.post.findUnique({ where: { id } });
+    // deletedAt: null 조건을 붙이려면 unique 전용 findUnique 대신 findFirst를 쓴다.
+    const row = await this.prisma.post.findFirst({
+      where: { id, deletedAt: null },
+    });
     return row ? this.toDomain(row) : null;
   }
 
   async findByBuilding(buildingId: string): Promise<Post[]> {
     const rows = await this.prisma.post.findMany({
-      where: { buildingId },
+      where: { buildingId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     return rows.map((row) => this.toDomain(row));
@@ -61,6 +64,18 @@ export class PrismaPostRepository implements PostRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.post.delete({ where: { id } });
+    // 물리삭제 대신 논리삭제. Post와 그에 속한 살아있는 Comment를
+    // 같은 트랜잭션에서 함께 soft delete해 원자성을 보장한다.
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.comment.updateMany({
+        where: { postId: id, deletedAt: null },
+        data: { deletedAt: now },
+      }),
+      this.prisma.post.update({
+        where: { id },
+        data: { deletedAt: now },
+      }),
+    ]);
   }
 }
