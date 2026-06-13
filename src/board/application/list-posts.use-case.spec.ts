@@ -1,4 +1,3 @@
-import { ForbiddenException } from '@nestjs/common';
 import { ListPostsUseCase } from './list-posts.use-case';
 import { Post } from '../domain/post.entity';
 import { PostCategory } from '../domain/post-category.enum';
@@ -108,6 +107,6 @@ describe('ListPostsUseCase', () => {
 
     await expect(
       useCase.execute({ userId: USER_ID, buildingId: BUILDING_ID }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toMatchObject({ code: 'BOARD_NOT_BUILDING_MEMBER' });
   });
 });

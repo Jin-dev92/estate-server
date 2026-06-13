@@ -1,4 +1,3 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UpdatePostUseCase } from './update-post.use-case';
 import { Post } from '../domain/post.entity';
 import { PostCategory } from '../domain/post-category.enum';
@@ -83,7 +82,7 @@ describe('UpdatePostUseCase', () => {
         title: 't',
         content: 'c',
       }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toMatchObject({ code: 'BOARD_NOT_AUTHOR' });
   });
 
   it('없는 글이면 NotFoundException', async () => {
@@ -96,6 +95,6 @@ describe('UpdatePostUseCase', () => {
         title: 't',
         content: 'c',
       }),
-    ).rejects.toThrow(NotFoundException);
+    ).rejects.toMatchObject({ code: 'BOARD_POST_NOT_FOUND' });
   });
 });

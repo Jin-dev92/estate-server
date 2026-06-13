@@ -1,11 +1,8 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
 import { BOARD_CACHE, BoardCache } from './board-cache';
+import { AppException } from '../../common/errors/app-exception';
+import { BoardError } from '../board.errors';
 
 export interface DeletePostInput {
   userId: string;
@@ -21,9 +18,9 @@ export class DeletePostUseCase {
 
   async execute(input: DeletePostInput): Promise<void> {
     const post = await this.posts.findById(input.postId);
-    if (!post) throw new NotFoundException('post not found');
+    if (!post) throw new AppException(BoardError.POST_NOT_FOUND);
     if (!post.isAuthoredBy(input.userId)) {
-      throw new ForbiddenException('not the author');
+      throw new AppException(BoardError.NOT_AUTHOR);
     }
     await this.posts.delete(input.postId);
     await this.cache.invalidateDetail(input.postId);

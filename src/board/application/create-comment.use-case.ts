@@ -1,9 +1,4 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Comment } from '../domain/comment.entity';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
 import {
@@ -12,6 +7,8 @@ import {
 } from '../domain/comment.repository';
 import { BOARD_CACHE, BoardCache } from './board-cache';
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
+import { AppException } from '../../common/errors/app-exception';
+import { BoardError } from '../board.errors';
 
 export interface CreateCommentInput {
   userId: string;
@@ -30,9 +27,9 @@ export class CreateCommentUseCase {
 
   async execute(input: CreateCommentInput): Promise<Comment> {
     const post = await this.posts.findById(input.postId);
-    if (!post) throw new NotFoundException('post not found');
+    if (!post) throw new AppException(BoardError.POST_NOT_FOUND);
     const ok = await this.membership.isMember(input.userId, post.buildingId);
-    if (!ok) throw new ForbiddenException('not a building member');
+    if (!ok) throw new AppException(BoardError.NOT_BUILDING_MEMBER);
 
     const saved = await this.comments.create(
       Comment.create({

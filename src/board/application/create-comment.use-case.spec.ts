@@ -1,4 +1,3 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CreateCommentUseCase } from './create-comment.use-case';
 import { Post } from '../domain/post.entity';
 import { PostCategory } from '../domain/post-category.enum';
@@ -101,7 +100,7 @@ describe('CreateCommentUseCase', () => {
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID, content: '댓글' }),
-    ).rejects.toThrow(NotFoundException);
+    ).rejects.toMatchObject({ code: 'BOARD_POST_NOT_FOUND' });
   });
 
   it('멤버가 아니면 ForbiddenException', async () => {
@@ -114,6 +113,6 @@ describe('CreateCommentUseCase', () => {
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID, content: '댓글' }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toMatchObject({ code: 'BOARD_NOT_BUILDING_MEMBER' });
   });
 });

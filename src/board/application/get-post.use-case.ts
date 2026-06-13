@@ -1,9 +1,4 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
 import {
   COMMENT_REPOSITORY,
@@ -11,6 +6,8 @@ import {
 } from '../domain/comment.repository';
 import { BOARD_CACHE, BoardCache, PostDetail } from './board-cache';
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
+import { AppException } from '../../common/errors/app-exception';
+import { BoardError } from '../board.errors';
 
 export interface GetPostInput {
   userId: string;
@@ -34,7 +31,7 @@ export class GetPostUseCase {
     }
 
     const post = await this.posts.findById(input.postId);
-    if (!post) throw new NotFoundException('post not found');
+    if (!post) throw new AppException(BoardError.POST_NOT_FOUND);
     await this.authorize(input.userId, post.buildingId);
 
     const comments = await this.comments.findByPost(input.postId);
@@ -57,6 +54,6 @@ export class GetPostUseCase {
 
   private async authorize(userId: string, buildingId: string): Promise<void> {
     const ok = await this.membership.isMember(userId, buildingId);
-    if (!ok) throw new ForbiddenException('not a building member');
+    if (!ok) throw new AppException(BoardError.NOT_BUILDING_MEMBER);
   }
 }

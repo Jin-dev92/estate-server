@@ -1,7 +1,9 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
 import { BOARD_CACHE, BoardCache, PostSummary } from './board-cache';
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
+import { AppException } from '../../common/errors/app-exception';
+import { BoardError } from '../board.errors';
 
 export interface ListPostsInput {
   userId: string;
@@ -18,7 +20,7 @@ export class ListPostsUseCase {
 
   async execute(input: ListPostsInput): Promise<PostSummary[]> {
     const ok = await this.membership.isMember(input.userId, input.buildingId);
-    if (!ok) throw new ForbiddenException('not a building member');
+    if (!ok) throw new AppException(BoardError.NOT_BUILDING_MEMBER);
 
     const cached = await this.cache.getList(input.buildingId);
     if (cached) return cached;

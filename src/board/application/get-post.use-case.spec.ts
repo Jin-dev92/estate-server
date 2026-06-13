@@ -1,4 +1,3 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GetPostUseCase } from './get-post.use-case';
 import { Post } from '../domain/post.entity';
 import { PostCategory } from '../domain/post-category.enum';
@@ -100,7 +99,7 @@ describe('GetPostUseCase', () => {
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID }),
-    ).rejects.toThrow(NotFoundException);
+    ).rejects.toMatchObject({ code: 'BOARD_POST_NOT_FOUND' });
   });
 
   it('멤버가 아니면 ForbiddenException', async () => {
@@ -113,7 +112,7 @@ describe('GetPostUseCase', () => {
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toMatchObject({ code: 'BOARD_NOT_BUILDING_MEMBER' });
   });
 
   it('캐시 hit이어도 멤버가 아니면 ForbiddenException', async () => {
@@ -136,6 +135,6 @@ describe('GetPostUseCase', () => {
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toMatchObject({ code: 'BOARD_NOT_BUILDING_MEMBER' });
   });
 });
