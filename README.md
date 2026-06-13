@@ -139,6 +139,7 @@
 | **M1** ✅ | 건물/호실/입주 + 초대코드(Redis TTL) | Prisma 관계, Redis TTL |
 | **M2** ✅ | 게시판 CRUD + Redis 캐싱 | 캐시 무효화 패턴 |
 | **M2.5** ✅ | 전역 에러 처리 + 커스텀 예외 + 일관 에러 봉투 | ExceptionFilter, 커스텀 예외 |
+| **M2.6** ✅ | Swagger(OpenAPI) 연동 + 기존 엔드포인트 문서화 | @nestjs/swagger, enum 명명 스키마 |
 | **M3** | Kafka 도입 + audit-worker | producer/consumer 첫걸음 |
 | **M4** | 1:1 채팅 WS + Redis pub/sub + persistence-worker | WS+Redis+Kafka 통합 |
 | **M5** | notification-worker + WS 푸시 + 미읽음 카운트 | 다중 컨슈머 팬아웃 |
@@ -153,6 +154,8 @@
 ## 7. API 레퍼런스
 
 > API가 추가·변경되면 이 표와 PR 본문을 함께 갱신합니다(CLAUDE.md "API 문서화" 규칙). 모든 보호 엔드포인트는 `Authorization: Bearer <accessToken>` 헤더가 필요합니다.
+
+서버 기동 후 **`/docs`**(Swagger UI)·**`/docs-json`**(OpenAPI JSON)에서 인터랙티브 API 문서를 볼 수 있습니다. 아래 표는 요약이며, 상세한 요청·응답 스키마·인증 요건·에러 봉투·enum 허용값은 Swagger에서 확인하세요.
 
 ### Auth (M0)
 

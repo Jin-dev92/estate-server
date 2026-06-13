@@ -51,6 +51,18 @@ README에는 컨텍스트별 **API 표**를 유지하고, PR 본문에는 그 PR
 
 ---
 
+## Swagger (신규 API 필수)
+
+새로 추가하거나 변경하는 **모든 엔드포인트는 Swagger 데코레이터를 필수**로 단다.
+
+- 컨트롤러에 `@ApiTags`(태그명은 `SWAGGER_TAGS` 상수와 일치), 각 라우트에 `@ApiOperation` + 성공 `@ApiResponse`.
+- 인증이 필요한 라우트에는 `@ApiBearerAuth(SWAGGER_BEARER_AUTH)`.
+- 라우트가 낼 수 있는 4xx는 `@ApiResponse({ type: ErrorResponseDto })`로 표기한다(M2.5 에러 봉투 계약).
+- 요청 DTO의 모든 필드에 `@ApiProperty`. **enum 필드는 `@ApiProperty({ enum: XxxEnum, enumName: 'XxxEnum' })`로 허용값을 명명 스키마로 노출한다(필수).**
+- 이 규칙은 위 `## API 문서화`(README 표)와 **병행**한다 — README 표와 Swagger 데코레이터를 둘 다 갱신한다. `/review`가 누락을 점검한다.
+
+---
+
 ## NestJS Test Code Rules
 
 > 출처: iCloud `claude/docs/nestjs-test-rules.md`
