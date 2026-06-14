@@ -3,7 +3,11 @@ import { RedisService } from '../../redis/redis.service';
 import { ChatMessagePayload } from '../domain/chat-message';
 
 const payload: ChatMessagePayload = {
-  roomId: 'r1', messageId: 'm1', senderId: 'u1', content: '안녕', createdAt: '2026-06-14T00:00:00.000Z',
+  roomId: 'r1',
+  messageId: 'm1',
+  senderId: 'u1',
+  content: '안녕',
+  createdAt: '2026-06-14T00:00:00.000Z',
 };
 
 describe('RedisMessageCache', () => {
@@ -11,7 +15,11 @@ describe('RedisMessageCache', () => {
   let cache: RedisMessageCache;
 
   beforeEach(() => {
-    redis = { lpush: jest.fn().mockResolvedValue(1), ltrim: jest.fn().mockResolvedValue('OK'), lrange: jest.fn() };
+    redis = {
+      lpush: jest.fn().mockResolvedValue(1),
+      ltrim: jest.fn().mockResolvedValue('OK'),
+      lrange: jest.fn(),
+    };
     cache = new RedisMessageCache(redis as unknown as RedisService);
   });
   afterEach(() => jest.clearAllMocks());

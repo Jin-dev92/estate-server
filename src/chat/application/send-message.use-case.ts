@@ -4,7 +4,10 @@ import { AppException } from '../../common/errors/app-exception';
 import { ChatError } from '../chat.errors';
 import { Message } from '../domain/message.entity';
 import { ChatMessagePayload } from '../domain/chat-message';
-import { CHAT_ROOM_REPOSITORY, ChatRoomRepository } from '../domain/chat-room.repository';
+import {
+  CHAT_ROOM_REPOSITORY,
+  ChatRoomRepository,
+} from '../domain/chat-room.repository';
 import { MESSAGE_RELAY, MessageRelay } from '../domain/message-relay';
 import { MESSAGE_CACHE, MessageCache } from '../domain/message-cache';
 import { EVENT_PUBLISHER, EventPublisher } from '../../events/event-publisher';
@@ -36,7 +39,11 @@ export class SendMessageUseCase {
     }
 
     // ③ 메시지 생성 — messageId(uuid)·createdAt은 앱에서 생성(영속화 멱등 키)
-    const message = Message.create({ roomId: input.roomId, senderId: input.userId, content: input.content });
+    const message = Message.create({
+      roomId: input.roomId,
+      senderId: input.userId,
+      content: input.content,
+    });
     const payload: ChatMessagePayload = {
       roomId: message.roomId,
       messageId: message.id,

@@ -4,11 +4,18 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ChatMessagePayload } from '../domain/chat-message';
 
 const payload: ChatMessagePayload = {
-  roomId: 'r1', messageId: 'm1', senderId: 'u1', content: '안녕', createdAt: '2026-06-14T00:00:00.000Z',
+  roomId: 'r1',
+  messageId: 'm1',
+  senderId: 'u1',
+  content: '안녕',
+  createdAt: '2026-06-14T00:00:00.000Z',
 };
 
 function p2002(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+  return new Prisma.PrismaClientKnownRequestError('dup', {
+    code: 'P2002',
+    clientVersion: 'test',
+  });
 }
 
 describe('PrismaMessageRepository.persist', () => {
@@ -27,7 +34,13 @@ describe('PrismaMessageRepository.persist', () => {
     await repo.persist(payload);
 
     expect(prisma.message.create).toHaveBeenCalledWith({
-      data: { id: 'm1', roomId: 'r1', senderId: 'u1', content: '안녕', createdAt: new Date('2026-06-14T00:00:00.000Z') },
+      data: {
+        id: 'm1',
+        roomId: 'r1',
+        senderId: 'u1',
+        content: '안녕',
+        createdAt: new Date('2026-06-14T00:00:00.000Z'),
+      },
     });
   });
 

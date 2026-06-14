@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ChatRoom } from '../domain/chat-room.entity';
-import { CHAT_ROOM_REPOSITORY, ChatRoomRepository } from '../domain/chat-room.repository';
+import {
+  CHAT_ROOM_REPOSITORY,
+  ChatRoomRepository,
+} from '../domain/chat-room.repository';
 
 @Injectable()
 export class ListRoomsUseCase {

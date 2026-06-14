@@ -13,7 +13,10 @@ import { Server, Socket } from 'socket.io';
 import { ConfigKey } from '../../config/config-keys';
 import { TokenPayload } from '../../auth/domain/token-issuer';
 import { SendMessageUseCase } from '../application/send-message.use-case';
-import { CHAT_ROOM_REPOSITORY, ChatRoomRepository } from '../domain/chat-room.repository';
+import {
+  CHAT_ROOM_REPOSITORY,
+  ChatRoomRepository,
+} from '../domain/chat-room.repository';
 import { MESSAGE_RELAY, MessageRelay } from '../domain/message-relay';
 
 // WS는 transport만: 인증(handleConnection)·방 join·send 라우팅. 로직은 유스케이스.
@@ -44,15 +47,18 @@ export class ChatGateway implements OnGatewayConnection, OnModuleInit {
       const payload = this.jwt.verify<TokenPayload>(token, {
         secret: this.config.getOrThrow<string>(ConfigKey.JwtSecret),
       });
-      client.data.userId = payload.sub;
+      (client.data as { userId?: string }).userId = payload.sub;
     } catch {
       client.disconnect();
     }
   }
 
   @SubscribeMessage('join')
-  async onJoin(@ConnectedSocket() client: Socket, @MessageBody() body: { roomId: string }): Promise<void> {
-    const userId = client.data.userId as string | undefined;
+  async onJoin(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string },
+  ): Promise<void> {
+    const userId = (client.data as { userId?: string }).userId;
     const room = userId ? await this.rooms.findById(body.roomId) : null;
     if (!room || !userId || !room.isParticipant(userId)) {
       client.emit('error', { code: 'CHAT_NOT_ROOM_PARTICIPANT' });
@@ -62,11 +68,18 @@ export class ChatGateway implements OnGatewayConnection, OnModuleInit {
   }
 
   @SubscribeMessage('message')
-  async onMessage(@ConnectedSocket() client: Socket, @MessageBody() body: { roomId: string; content: string }): Promise<void> {
-    const userId = client.data.userId as string | undefined;
+  async onMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string; content: string },
+  ): Promise<void> {
+    const userId = (client.data as { userId?: string }).userId;
     if (!userId) return;
     try {
-      await this.sendMessage.execute({ userId, roomId: body.roomId, content: body.content });
+      await this.sendMessage.execute({
+        userId,
+        roomId: body.roomId,
+        content: body.content,
+      });
     } catch (err) {
       client.emit('error', { message: (err as Error).message });
     }

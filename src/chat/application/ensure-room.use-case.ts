@@ -2,9 +2,18 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AppException } from '../../common/errors/app-exception';
 import { ChatError } from '../chat.errors';
 import { ChatRoom } from '../domain/chat-room.entity';
-import { CHAT_ROOM_REPOSITORY, ChatRoomRepository } from '../domain/chat-room.repository';
-import { BUILDING_REPOSITORY, BuildingRepository } from '../../property/domain/building.repository';
-import { MEMBERSHIP_CHECKER, MembershipChecker } from '../../board/application/membership';
+import {
+  CHAT_ROOM_REPOSITORY,
+  ChatRoomRepository,
+} from '../domain/chat-room.repository';
+import {
+  BUILDING_REPOSITORY,
+  BuildingRepository,
+} from '../../property/domain/building.repository';
+import {
+  MEMBERSHIP_CHECKER,
+  MembershipChecker,
+} from '../../board/application/membership';
 
 export interface EnsureRoomInput {
   userId: string;
@@ -33,15 +42,25 @@ export class EnsureRoomUseCase {
     }
 
     // tenant가 그 건물의 실제 멤버(입주자)인지 검증한다.
-    const tenantIsMember = await this.membership.isMember(input.tenantId, input.buildingId);
+    const tenantIsMember = await this.membership.isMember(
+      input.tenantId,
+      input.buildingId,
+    );
     if (!tenantIsMember) throw new AppException(ChatError.TENANT_NOT_MEMBER);
 
     // ensure: 있으면 반환, 없으면 생성.
-    const existing = await this.rooms.findByBuildingAndTenant(input.buildingId, input.tenantId);
+    const existing = await this.rooms.findByBuildingAndTenant(
+      input.buildingId,
+      input.tenantId,
+    );
     if (existing) return existing;
 
     return this.rooms.save(
-      ChatRoom.create({ buildingId: input.buildingId, ownerId: building.ownerId, tenantId: input.tenantId }),
+      ChatRoom.create({
+        buildingId: input.buildingId,
+        ownerId: building.ownerId,
+        tenantId: input.tenantId,
+      }),
     );
   }
 }

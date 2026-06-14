@@ -7,13 +7,27 @@ import { ChatRoomRepository } from '../domain/chat-room.repository';
 export class PrismaChatRoomRepository implements ChatRoomRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  private toDomain(row: { id: string; buildingId: string; ownerId: string; tenantId: string }): ChatRoom {
-    return ChatRoom.reconstitute({ id: row.id, buildingId: row.buildingId, ownerId: row.ownerId, tenantId: row.tenantId });
+  private toDomain(row: {
+    id: string;
+    buildingId: string;
+    ownerId: string;
+    tenantId: string;
+  }): ChatRoom {
+    return ChatRoom.reconstitute({
+      id: row.id,
+      buildingId: row.buildingId,
+      ownerId: row.ownerId,
+      tenantId: row.tenantId,
+    });
   }
 
   async save(room: ChatRoom): Promise<ChatRoom> {
     const row = await this.prisma.chatRoom.create({
-      data: { buildingId: room.buildingId, ownerId: room.ownerId, tenantId: room.tenantId },
+      data: {
+        buildingId: room.buildingId,
+        ownerId: room.ownerId,
+        tenantId: room.tenantId,
+      },
     });
     return this.toDomain(row);
   }
@@ -23,7 +37,10 @@ export class PrismaChatRoomRepository implements ChatRoomRepository {
     return row ? this.toDomain(row) : null;
   }
 
-  async findByBuildingAndTenant(buildingId: string, tenantId: string): Promise<ChatRoom | null> {
+  async findByBuildingAndTenant(
+    buildingId: string,
+    tenantId: string,
+  ): Promise<ChatRoom | null> {
     const row = await this.prisma.chatRoom.findUnique({
       where: { buildingId_tenantId: { buildingId, tenantId } },
     });

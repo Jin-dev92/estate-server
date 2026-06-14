@@ -10,7 +10,11 @@ interface ChatRoomProps {
 export class ChatRoom {
   private constructor(private readonly props: ChatRoomProps) {}
 
-  static create(input: { buildingId: string; ownerId: string; tenantId: string }): ChatRoom {
+  static create(input: {
+    buildingId: string;
+    ownerId: string;
+    tenantId: string;
+  }): ChatRoom {
     if (!input.buildingId) throw new DomainError('건물 ID는 필수입니다.');
     if (!input.ownerId) throw new DomainError('건물주 ID는 필수입니다.');
     if (!input.tenantId) throw new DomainError('입주자 ID는 필수입니다.');

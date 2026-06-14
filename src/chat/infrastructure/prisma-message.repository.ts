@@ -24,7 +24,10 @@ export class PrismaMessageRepository implements MessageRepository {
       });
     } catch (err) {
       // at-least-once 중복: 같은 messageId(P2002)는 이미 적재됨 → 무시. 그 외는 재시도 유도.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         this.logger.warn(`중복 메시지 무시: ${payload.messageId}`);
         return;
       }
@@ -39,7 +42,13 @@ export class PrismaMessageRepository implements MessageRepository {
       take: limit,
     });
     return rows.map((r) =>
-      Message.reconstitute({ id: r.id, roomId: r.roomId, senderId: r.senderId, content: r.content, createdAt: r.createdAt }),
+      Message.reconstitute({
+        id: r.id,
+        roomId: r.roomId,
+        senderId: r.senderId,
+        content: r.content,
+        createdAt: r.createdAt,
+      }),
     );
   }
 }

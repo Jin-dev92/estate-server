@@ -2,9 +2,15 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AppException } from '../../common/errors/app-exception';
 import { ChatError } from '../chat.errors';
 import { ChatMessagePayload } from '../domain/chat-message';
-import { CHAT_ROOM_REPOSITORY, ChatRoomRepository } from '../domain/chat-room.repository';
+import {
+  CHAT_ROOM_REPOSITORY,
+  ChatRoomRepository,
+} from '../domain/chat-room.repository';
 import { MESSAGE_CACHE, MessageCache } from '../domain/message-cache';
-import { MESSAGE_REPOSITORY, MessageRepository } from '../domain/message.repository';
+import {
+  MESSAGE_REPOSITORY,
+  MessageRepository,
+} from '../domain/message.repository';
 
 export interface GetMessagesInput {
   userId: string;

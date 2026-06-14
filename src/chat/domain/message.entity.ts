@@ -13,7 +13,11 @@ export class Message {
   private constructor(private readonly props: MessageProps) {}
 
   // 새 메시지: messageId(uuid)·createdAt을 앱에서 생성한다(영속화 멱등 키).
-  static create(input: { roomId: string; senderId: string; content: string }): Message {
+  static create(input: {
+    roomId: string;
+    senderId: string;
+    content: string;
+  }): Message {
     if (!input.content) throw new DomainError('내용은 필수입니다.');
     return new Message({
       id: randomUUID(),

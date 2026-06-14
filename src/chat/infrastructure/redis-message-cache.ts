@@ -21,7 +21,10 @@ export class RedisMessageCache implements MessageCache {
     await this.redis.ltrim(key, 0, RECENT_LIMIT - 1);
   }
 
-  async getRecent(roomId: string, limit: number): Promise<ChatMessagePayload[]> {
+  async getRecent(
+    roomId: string,
+    limit: number,
+  ): Promise<ChatMessagePayload[]> {
     const rows = await this.redis.lrange(recentKey(roomId), 0, limit - 1);
     return rows.map((r) => JSON.parse(r) as ChatMessagePayload);
   }

@@ -16,7 +16,9 @@ export class RedisMessageRelay implements MessageRelay {
     await this.redis.publish(CHANNEL, JSON.stringify(message));
   }
 
-  async subscribe(handler: (message: ChatMessagePayload) => void): Promise<void> {
+  async subscribe(
+    handler: (message: ChatMessagePayload) => void,
+  ): Promise<void> {
     // 구독 모드 연결은 일반 명령을 못 쓰므로 전용 연결(duplicate)을 만든다.
     const sub = this.redis.duplicate();
     await sub.subscribe(CHANNEL);
