@@ -75,25 +75,68 @@ model Message {
 
 ---
 
-## 4. 메시지 전송 흐름 (WS Gateway → 4단계)
+## 4. 메시지 전송 흐름
+
+### 4.0 한눈에 보기 — 한 메시지가 가는 길
+
+입주자(인스턴스 A에 접속)가 건물주(인스턴스 B에 접속)에게 메시지를 보내는 상황. **핵심은 메시지를 받자마자 흐름이 두 갈래로 갈라진다는 것**이다 — 빠른 "실시간 전달"과 느린 "영속화"가 서로를 기다리지 않는다.
+
+```
+ 입주자(클라)
+     │  ① message {roomId, content}   (WebSocket)
+     ▼
+┌─────────────────── 인스턴스 A ───────────────────┐
+│  ChatGateway ──▶ SendMessageUseCase              │
+│                   · 방 참가자 권한 검증            │
+│                   · messageId(uuid) 생성          │
+│        ┌───────────────┴───────────────┐         │
+│        ▼ (실시간, 안 기다림)             ▼ (영속화) │
+│  ② Redis PUBLISH                  ④ Kafka emit    │
+│     채널 'chat:messages'             'chat-events' │
+│        │                            (key=roomId)  │
+│  ③ Redis capped list                    │         │
+│     LPUSH+LTRIM (최근 N개 캐시)          │         │
+└────────┼─────────────────────────────────┼────────┘
+         │ (모든 인스턴스가 구독)            │ (group: persistence-worker)
+    ┌────┴────┐                             ▼
+    ▼         ▼                      persistence-worker
+인스턴스 A   인스턴스 B                · Message 단건 멱등 INSERT
+ (송신자     · roomId로 내 room인지     ·  (id=messageId, 중복 P2002 무시)
+  자신에게    필터                            │
+  에코)      · server.to(roomId)              ▼
+             .emit('message')           ┌──────────┐
+                  │                      │ Message  │ (DB)
+                  ▼                      │  테이블   │
+              건물주(클라)               └──────────┘
+            "실시간 수신" ✓
+```
+
+**두 경로의 시간 축이 다르다:**
+- **실시간 경로(②③):** 수 ms. 건물주는 DB에 글이 써지기 전에 이미 메시지를 본다.
+- **영속화 경로(④):** Kafka가 **쓰기 버퍼** 역할. persistence-worker가 자기 속도로 비동기 INSERT. 트래픽 폭주 시에도 WS 응답은 느려지지 않는다(스파이크를 Kafka가 흡수).
+- 그래서 "전달은 됐는데 DB엔 아직 없는" 짧은 윈도우가 생긴다(학습 수준 허용 → 엄밀히는 M6 Outbox).
+
+### 4.1 단계 상세
 
 클라가 `message {roomId, content}`를 보내면 `SendMessageUseCase`가:
 ```
-1) socket.userId가 그 방 참가자(ownerId/tenantId 중 하나)인지 검증
+① socket.userId가 그 방 참가자(ownerId/tenantId 중 하나)인지 검증
    + messageId(uuid)·occurredAt 생성
-2) MessageRelay.publish → Redis 단일 채널 'chat:messages' (payload: {roomId, messageId, senderId, content, createdAt})
-3) MessageCache.push → Redis capped list 'chat:room:{roomId}:recent' (LPUSH + LTRIM 0 N-1)
-4) EventPublisher.publish → Kafka 'chat-events' MessageSent (파티션 키 = roomId)
+② MessageRelay.publish → Redis 단일 채널 'chat:messages'
+   (payload: {roomId, messageId, senderId, content, createdAt})
+③ MessageCache.push → Redis capped list 'chat:room:{roomId}:recent' (LPUSH + LTRIM 0 N-1)
+④ EventPublisher.publish → Kafka 'chat-events' MessageSent (파티션 키 = roomId)
 ```
-- **DB INSERT를 기다리지 않는다.** 영속화는 4)를 거쳐 persistence-worker가 비동기 수행.
+- **DB INSERT를 기다리지 않는다.** 영속화는 ④를 거쳐 persistence-worker가 비동기 수행.
 - 발행 실패(Kafka)는 M3 `KafkaEventPublisher`가 내부에서 삼킨다(after-commit 한계 → M6 Outbox).
+- ②③④의 순서는 "실시간 먼저(②③), 영속화 나중(④)" — 사용자 체감 지연을 최소화한다.
 
-### 4.1 Redis pub/sub 중계 (인스턴스 간)
+### 4.2 Redis pub/sub 중계 (인스턴스 간)
 - 모든 인스턴스가 부팅 시 `chat:messages`를 **1회 구독**(연결마다가 아님).
 - 수신 시 payload의 `roomId`로 `server.to(roomId).emit('message', payload)` → 그 인스턴스에서 해당 room에 `join`한 소켓들에 전달.
 - 송신 인스턴스도 자기 구독으로 받아 emit하므로 경로가 일관된다.
 
-### 4.2 Redis 최근메시지 캐시
+### 4.3 Redis 최근메시지 캐시
 - 키 `chat:room:{roomId}:recent`, `LPUSH` 후 `LTRIM 0 N-1`로 최근 N개 유지(capped list).
 - 히스토리 조회는 이 캐시를 우선 사용하고, 더 과거는 DB로 폴백.
 
