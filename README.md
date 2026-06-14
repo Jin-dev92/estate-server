@@ -95,7 +95,7 @@
 
 ## 5. 주요 설계 결정·트레이드오프
 
-이 프로젝트의 모든 설계는 "왜 그렇게 했는가"를 근거와 트레이드오프로 남겼습니다. 핵심 결정 10가지를 요약합니다. *(각 결정의 더 깊은 맥락과 대안 비교는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.)*
+이 프로젝트의 모든 설계는 "왜 그렇게 했는가"를 근거와 트레이드오프로 남겼습니다. 핵심 결정 11가지를 요약합니다. *(각 결정의 더 깊은 맥락과 대안 비교는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.)*
 
 **1. 도메인을 `건물 → 호실 → 입주` 3계층으로**
 - *근거:* 호실 단위 점유·소통("특정 호실 입주자에게만 보이는 공지")을 표현할 수 있다. 2계층은 이 구분이 사라지고, 일반 Workspace 추상화는 건물주 도메인의 의미가 흐려진다.
@@ -142,6 +142,10 @@
 - *근거:* 도메인 이벤트 4종을 `@nestjs/microservices`로 발행하고, 부작용 없는 audit-worker가 멱등 소비(`eventId @unique`)해 `AuditLog`에 적재한다. 발행 추상화는 application 직접 발행(`EventPublisher` 포트)으로 도메인이 Kafka를 모르게 한다.
 - *트레이드오프:* after-commit 단순 발행이라 "DB는 썼는데 발행 직전 크래시" 시 이벤트 유실 창이 있다(의도된 한계). **M6 Transactional Outbox**로 해소한다.
 
+**11. M4 — 채팅: 실시간 전달(WS+Redis pub/sub)과 영속화(Kafka persistence-worker) 분리**
+- *근거:* WS Gateway(socket.io)가 메시지를 받아 Redis 단일 채널로 즉시 중계(멀티 인스턴스)하고 capped list에 캐시하며, Kafka `chat-events`를 쓰기 버퍼로 두어 persistence-worker가 비동기 단건 멱등 INSERT(`Message.id=messageId`)한다. DB를 기다리지 않아 체감 지연이 낮다. 순서는 `roomId`를 파티션 키로 보장한다.
+- *트레이드오프:* "전달은 됐는데 DB엔 아직" 윈도우(→M6 Outbox), 단일 pub/sub 채널은 트래픽 증가 시 방별 샤딩이 후속 과제. 현재는 단일 hybrid 프로세스의 한 consumer group이 토픽별 핸들러로 소비하며, 같은 이벤트를 여러 그룹이 받는 본격 팬아웃은 **M5**에서 도입한다.
+
 ---
 
 ## 6. 개발 마일스톤
@@ -154,7 +158,7 @@
 | **M2.5** ✅ | 전역 에러 처리 + 커스텀 예외 + 일관 에러 봉투 | ExceptionFilter, 커스텀 예외 |
 | **M2.6** ✅ | Swagger(OpenAPI) 연동 + 기존 엔드포인트 문서화 | @nestjs/swagger, enum 명명 스키마 |
 | **M3** ✅ | Kafka 도입 + audit-worker | producer/consumer 첫걸음 |
-| **M4** | 1:1 채팅 WS + Redis pub/sub + persistence-worker | WS+Redis+Kafka 통합 |
+| **M4** ✅ | 1:1 채팅 WS + Redis pub/sub + persistence-worker | WS+Redis+Kafka 통합 |
 | **M5** | notification-worker + WS 푸시 + 미읽음 카운트 | 다중 컨슈머 팬아웃 |
 | **M6** | rate limit · 보안 점검 · (선택) Outbox | 운영·보안 |
 | **F1** *(추후)* | OAuth 소셜 로그인 | 외부 인증 연동 |
@@ -202,6 +206,17 @@
 | `POST /posts/:postId/comments` | 댓글 작성 | 건물 멤버 |
 
 > **건물 멤버** = 건물주이거나 그 건물 호실에 ACTIVE 입주(Lease)가 있는 사용자.
+
+### Chat (M4)
+
+| 메서드·경로 | 기능 | 인가 |
+|---|---|---|
+| `POST /chat/rooms` | 채팅방 생성/조회(ensure) | 인증 + 건물 OWNER 또는 본인-입주자 |
+| `GET /chat/rooms` | 내 채팅방 목록 | 인증(본인이 참가자인 방) |
+| `GET /chat/rooms/:id/messages` | 메시지 히스토리(최신순, 캐시 우선·DB 폴백) | 방 참가자 |
+| WS `join` / `message` | 1:1 실시간 채팅(socket.io, 핸드셰이크 `auth.token` JWT) | 방 참가자 |
+
+> 메시지 전송은 Redis pub/sub로 즉시 중계되고, Kafka `chat-events`를 거쳐 persistence-worker가 비동기로 DB에 적재합니다(설계 §4 파이프라인).
 
 ### 에러 응답 형식 (M2.5)
 
