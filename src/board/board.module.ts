@@ -29,5 +29,6 @@ import { PrismaMembershipChecker } from './infrastructure/prisma-membership.chec
     { provide: BOARD_CACHE, useClass: RedisBoardCache },
     { provide: MEMBERSHIP_CHECKER, useClass: PrismaMembershipChecker },
   ],
+  exports: [MEMBERSHIP_CHECKER],
 })
 export class BoardModule {}

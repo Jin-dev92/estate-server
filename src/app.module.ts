@@ -9,6 +9,7 @@ import { BoardModule } from './board/board.module';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { KafkaModule } from './events/kafka.module';
 import { AuditModule } from './audit/audit.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AuditModule } from './audit/audit.module';
     BoardModule,
     KafkaModule,
     AuditModule,
+    ChatModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })
