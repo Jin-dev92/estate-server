@@ -26,4 +26,9 @@ export const KAFKA_TOPIC_SPECS: readonly KafkaTopicSpec[] = [
     numPartitions: DEFAULT_PARTITIONS,
     replicationFactor: SINGLE_NODE_REPLICATION,
   },
+  {
+    topic: KafkaTopic.ChatEvents,
+    numPartitions: DEFAULT_PARTITIONS,
+    replicationFactor: SINGLE_NODE_REPLICATION,
+  },
 ];

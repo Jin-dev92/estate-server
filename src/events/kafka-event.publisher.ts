@@ -11,6 +11,7 @@ const TOPIC_BY_EVENT: Record<EventType, KafkaTopic> = {
   [EventType.CommentCreated]: KafkaTopic.BoardEvents,
   [EventType.TenantJoined]: KafkaTopic.MembershipEvents,
   [EventType.LeaseEnded]: KafkaTopic.MembershipEvents,
+  [EventType.MessageSent]: KafkaTopic.ChatEvents,
 };
 
 export const KAFKA_CLIENT = 'KAFKA_CLIENT';

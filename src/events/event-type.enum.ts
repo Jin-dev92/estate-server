@@ -4,6 +4,7 @@ export const enum EventType {
   CommentCreated = 'CommentCreated',
   TenantJoined = 'TenantJoined',
   LeaseEnded = 'LeaseEnded',
+  MessageSent = 'MessageSent',
 }
 
 // 이벤트가 가리키는 엔티티 종류(AuditLog.entityType).
@@ -11,10 +12,12 @@ export const enum EntityType {
   Post = 'Post',
   Comment = 'Comment',
   Lease = 'Lease',
+  Message = 'Message',
 }
 
 // Kafka 토픽 = 바운디드 컨텍스트 경계.
 export const enum KafkaTopic {
   BoardEvents = 'board-events',
   MembershipEvents = 'membership-events',
+  ChatEvents = 'chat-events',
 }
