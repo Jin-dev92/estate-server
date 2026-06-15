@@ -116,4 +116,21 @@ describe('HandleEventUseCase', () => {
 
     expect(saved).toEqual([]);
   });
+
+  it('푸시(relay.publish)가 실패해도 throw하지 않고 적재·INCR은 유지된다(best-effort)', async () => {
+    const { resolver, repo, counter, incremented } = deps(['owner1']);
+    const failingRelay: NotificationRelay = {
+      publish: () => Promise.reject(new Error('redis down')),
+      subscribe: () => Promise.resolve(),
+    };
+    const useCase = new HandleEventUseCase(
+      resolver,
+      repo,
+      counter,
+      failingRelay,
+    );
+
+    await expect(useCase.execute(POST_EVENT)).resolves.toBeUndefined();
+    expect(incremented).toEqual(['owner1']);
+  });
 });
