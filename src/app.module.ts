@@ -10,6 +10,7 @@ import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { KafkaModule } from './events/kafka.module';
 import { AuditModule } from './audit/audit.module';
 import { ChatModule } from './chat/chat.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ChatModule } from './chat/chat.module';
     KafkaModule,
     AuditModule,
     ChatModule,
+    NotificationModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })
