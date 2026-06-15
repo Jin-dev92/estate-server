@@ -113,6 +113,11 @@ describe('RateLimitGuard', () => {
       code: 'RATE_LIMIT_EXCEEDED',
     });
     expect(setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    // Retry-After는 윈도우(60초) 잔여 초 → 1..60 사이의 양의 정수
+    const retryAfter = Number((setHeader.mock.calls[0] as [string, string])[1]);
+    expect(Number.isInteger(retryAfter)).toBe(true);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
   });
 
   it('@RateLimit({ ipMax: 10 }) 오버라이드 — 11이면 초과', async () => {
@@ -157,5 +162,13 @@ describe('RateLimitGuard', () => {
     await expect(guard.canActivate(ctx)).rejects.toMatchObject({
       code: 'RATE_LIMIT_EXCEEDED',
     });
+  });
+
+  it('store가 throw하면(예: Redis 장애) 예외가 전파된다(fail-closed)', async () => {
+    const hit = jest.fn().mockRejectedValue(new Error('redis down'));
+    const { guard } = makeGuard({ hit });
+    const { ctx } = context('POST');
+
+    await expect(guard.canActivate(ctx)).rejects.toThrow('redis down');
   });
 });

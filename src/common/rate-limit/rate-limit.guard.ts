@@ -77,6 +77,8 @@ export class RateLimitGuard implements CanActivate {
       });
     }
 
+    // Redis 장애로 store.hit이 throw하면 예외가 그대로 전파돼 500이 된다(= fail-closed:
+    // 카운트 불가 시 해당 요청을 통과시키지 않음). 가용성보다 보호를 우선한 의도된 동작.
     for (const { key, max } of checks) {
       const count = await this.store.hit(key, windowSec);
       if (count > max) {
