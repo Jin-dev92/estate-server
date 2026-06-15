@@ -11,4 +11,7 @@ export const enum ConfigKey {
   JwtExpiresIn = 'JWT_EXPIRES_IN',
   RedisUrl = 'REDIS_URL',
   KafkaBrokers = 'KAFKA_BROKERS',
+  RateLimitWindowSec = 'RATE_LIMIT_WINDOW_SEC',
+  RateLimitUserMax = 'RATE_LIMIT_USER_MAX',
+  RateLimitIpMax = 'RATE_LIMIT_IP_MAX',
 }
