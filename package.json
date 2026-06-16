@@ -26,7 +26,12 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "load:seed": "ts-node prisma/seed-load.ts"
+    "load:seed": "ts-node prisma/seed-load.ts",
+    "load:smoke": "k6 run load/scenarios/read-posts.js",
+    "load:read": "k6 run load/scenarios/read-posts.js",
+    "load:create": "k6 run load/scenarios/create-post.js",
+    "load:login": "k6 run load/scenarios/login.js",
+    "load:ratelimit": "k6 run load/scenarios/rate-limit.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
