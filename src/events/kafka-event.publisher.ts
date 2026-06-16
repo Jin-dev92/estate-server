@@ -3,16 +3,7 @@ import { ClientKafka } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { EventPublisher } from './event-publisher';
 import { DomainEvent } from './domain-event';
-import { EventType, KafkaTopic } from './event-type.enum';
-
-// 이벤트 종류 → 토픽 매핑의 단일 출처.
-const TOPIC_BY_EVENT: Record<EventType, KafkaTopic> = {
-  [EventType.PostCreated]: KafkaTopic.BoardEvents,
-  [EventType.CommentCreated]: KafkaTopic.BoardEvents,
-  [EventType.TenantJoined]: KafkaTopic.MembershipEvents,
-  [EventType.LeaseEnded]: KafkaTopic.MembershipEvents,
-  [EventType.MessageSent]: KafkaTopic.ChatEvents,
-};
+import { topicForEvent } from './event-type.enum';
 
 export const KAFKA_CLIENT = 'KAFKA_CLIENT';
 
@@ -28,7 +19,7 @@ export class KafkaEventPublisher implements EventPublisher, OnModuleInit {
   }
 
   async publish(event: DomainEvent): Promise<void> {
-    const topic = TOPIC_BY_EVENT[event.eventType];
+    const topic = topicForEvent(event.eventType);
     try {
       // 파티션 키 = entityId → 같은 엔티티 이벤트의 순서 보장.
       await firstValueFrom(

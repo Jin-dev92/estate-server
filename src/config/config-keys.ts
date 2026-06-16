@@ -14,4 +14,6 @@ export const enum ConfigKey {
   RateLimitWindowSec = 'RATE_LIMIT_WINDOW_SEC',
   RateLimitUserMax = 'RATE_LIMIT_USER_MAX',
   RateLimitIpMax = 'RATE_LIMIT_IP_MAX',
+  OutboxPollMs = 'OUTBOX_POLL_MS',
+  OutboxBatchSize = 'OUTBOX_BATCH_SIZE',
 }

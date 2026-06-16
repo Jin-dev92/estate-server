@@ -21,3 +21,16 @@ export const enum KafkaTopic {
   MembershipEvents = 'membership-events',
   ChatEvents = 'chat-events',
 }
+
+// 이벤트 종류 → 토픽 매핑의 단일 출처. publisher와 outbox.add가 공유한다.
+const TOPIC_BY_EVENT: Record<EventType, KafkaTopic> = {
+  [EventType.PostCreated]: KafkaTopic.BoardEvents,
+  [EventType.CommentCreated]: KafkaTopic.BoardEvents,
+  [EventType.TenantJoined]: KafkaTopic.MembershipEvents,
+  [EventType.LeaseEnded]: KafkaTopic.MembershipEvents,
+  [EventType.MessageSent]: KafkaTopic.ChatEvents,
+};
+
+export function topicForEvent(eventType: EventType): KafkaTopic {
+  return TOPIC_BY_EVENT[eventType];
+}
