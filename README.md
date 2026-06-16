@@ -170,10 +170,18 @@
 | **M6** ✅ | rate limit · 보안 점검 | 운영·보안 |
 | **Outbox** ✅ | Transactional Outbox(dual-write 유실 제거) + outbox-relay 워커 | 트랜잭션 정합·SKIP LOCKED·at-least-once |
 | **M7** ✅ | k6 API 부하테스트(성격별 대표 4개 + thresholds) | 성능 baseline·p95/p99·부하 도구 |
+| **M8** *(예정)* | 부하 한계 탐색: stress/spike (별도 부하 머신) | k6 arrival-rate·병목·용량 계획 |
+| **M9** *(예정)* | Outbox 견고화: DLQ(FAILED 격리)·재시도 백오프 | poison message·운영 견고함 |
+| **CI** *(예정)* | CI 파이프라인 — 부하 smoke 자동화 **+ (추가 예정)** | GitHub Actions·서비스 컨테이너 |
 | **F1** *(추후)* | OAuth 소셜 로그인 | 외부 인증 연동 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
 
-> M0~M6은 1차 범위이며 각 단계가 독립적으로 동작 검증되도록 끊었습니다. 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시킵니다.
+> M0~M7은 1차 범위이며 각 단계가 독립적으로 동작 검증되도록 끊었습니다. 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시킵니다.
+>
+> **운영·견고함 후속(M8·M9·CI)** — M0~M7로 핵심 기능·정합성·부하 baseline은 끝났고, 그 위에 운영 견고함을 얹는 후속이다. 각 항목의 배경·트레이드오프는 [학습 노트](docs/study/마일스톤-학습-노트.md)(부하 stress/spike §8.5, Outbox DLQ §8)에 정리해 두었다. 순서는 느슨하며 우선순위에 따라 조정한다.
+> - **M8 (stress/spike):** 한계점·병목 탐색. 로컬 단일 머신은 "앱이 아니라 머신이 먼저 한계"라 **별도 부하 머신**이 전제. closed VU로는 backpressure가 숨으니 open(arrival-rate) executor로 간다.
+> - **M9 (Outbox DLQ):** 현재 relay는 발행 실패를 무한 재시도한다. poison message(영원히 실패)를 `PENDING → FAILED`로 격리해 정상 흐름을 막지 않게 한다(재시도 백오프·최대 횟수 포함).
+> - **CI (통합):** M7 부하 **smoke 자동화**(Actions 서비스 컨테이너로 PG·Redis·Kafka 기동 → 시드 → smoke → threshold 실패 시 red)를 시작점으로, **추가하고 싶은 CI 항목(린트·테스트·빌드·배포 등)을 한 마일스톤으로 통합**한다 — 구현은 그 CI 작업 시점에 함께 진행하고, 여기서는 자리만 잡아 둔다.
 
 ---
 
