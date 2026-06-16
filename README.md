@@ -139,7 +139,7 @@
 
 **10. M3 — Kafka 이벤트 발행 + audit-worker(부작용 없는 첫 소비자)**
 - *근거:* 도메인 이벤트 4종을 `@nestjs/microservices`로 발행하고, 부작용 없는 audit-worker가 멱등 소비(`eventId @unique`)해 `AuditLog`에 적재한다. 발행 추상화는 application 직접 발행(`EventPublisher` 포트)으로 도메인이 Kafka를 모르게 한다.
-- *트레이드오프:* after-commit 단순 발행이라 "DB는 썼는데 발행 직전 크래시" 시 이벤트 유실 창이 있다(의도된 한계). **M6 Transactional Outbox**로 해소한다.
+- *트레이드오프:* after-commit 단순 발행이라 "DB는 썼는데 발행 직전 크래시" 시 이벤트 유실 창이 있었다(M3 시점의 의도된 한계). **Transactional Outbox(결정 13)** 로 해소했다.
 
 **11. M4 — 채팅: 실시간 전달(WS+Redis pub/sub)과 영속화(Kafka persistence-worker) 분리**
 - *근거:* WS Gateway(socket.io)가 메시지를 받아 Redis 단일 채널로 즉시 중계(멀티 인스턴스)하고 capped list에 캐시하며, Kafka `chat-events`를 쓰기 버퍼로 두어 persistence-worker가 비동기 단건 멱등 INSERT(`Message.id=messageId`)한다. DB를 기다리지 않아 체감 지연이 낮다. 순서는 `roomId`를 파티션 키로 보장한다.
@@ -147,7 +147,11 @@
 
 **12. M5 — 워커별 엔트리포인트로 컨슈머 그룹 분리 + notification-worker**
 - *근거:* 이벤트 1건을 persistence·notification·audit이 **독립 consumer group**으로 각각 한 번씩 소비하는 팬아웃이 핵심 학습 목표(결정 6)다. NestJS hybrid는 `@EventPattern` 핸들러가 연결된 모든 마이크로서비스에 전역 등록되어 그룹별 분리가 어렵다 → main은 HTTP+WS+producer만 남기고, persistence/audit/notification을 **각각 별도 부트스트랩**(`src/workers/*.main.ts`, `NestFactory.create` 후 `listen()` 없이 `connectMicroservice`)으로 띄워 그룹·핸들러를 깔끔히 분리한다. notification-worker는 `MessageSent`·`CommentCreated`·`PostCreated`를 받아 수신자별 `Notification`을 멱등 적재(`@@unique[eventId,recipientId]`)하고, Redis 원자적 카운터로 미읽음을 관리하며, 접속 중 수신자에겐 Redis 채널 → main의 `/notifications` WS Gateway로 푸시한다.
-- *트레이드오프:* 프로세스가 4개(main + 워커 3)로 늘어 기동·관찰 비용이 증가하지만, 실제 배포 단위(워커=독립 배포·스케일)와 1:1로 맞아 현업 전이성이 높다. 푸시는 best-effort(적재·카운터가 진실 원천), 1:N(`PostCreated`) 알림은 동기 생성이라 대량 건물은 배치/비동기화가 후속 과제. dual-write 유실은 여전히 **M6 Outbox** 대상이다.
+- *트레이드오프:* 프로세스가 4개(main + 워커 3)로 늘어 기동·관찰 비용이 증가하지만, 실제 배포 단위(워커=독립 배포·스케일)와 1:1로 맞아 현업 전이성이 높다. 푸시는 best-effort(적재·카운터가 진실 원천), 1:N(`PostCreated`) 알림은 동기 생성이라 대량 건물은 배치/비동기화가 후속 과제. dual-write 유실은 **결정 13(Outbox)** 에서 해소했다.
+
+**13. Transactional Outbox — 도메인 변경과 이벤트 발행을 한 트랜잭션으로**
+- *근거:* 그동안 use case가 DB 쓰기(트랜잭션 1)를 커밋한 뒤 별도로 Kafka 발행을 호출해, 그 사이 크래시 시 "DB는 썼는데 이벤트 유실"(dual-write)이 가능했다. 이를 없애기 위해 **도메인 변경 + `OutboxEvent` 행 INSERT를 하나의 DB 트랜잭션**(`TransactionRunner.run(tx => { repo.create(.., tx); outbox.add(event, tx) })`)으로 커밋한다. 별도 **outbox-relay 워커**가 `setInterval` 폴링으로 PENDING을 `SELECT … FOR UPDATE SKIP LOCKED`로 잠그며 가져와 Kafka에 발행하고 PUBLISHED로 마킹한다. board·membership 4건(`PostCreated`·`CommentCreated`·`TenantJoined`·`LeaseEnded`)에 적용했다(chat은 실시간 전달이 주 경로라 제외).
+- *트레이드오프:* outbox→Kafka 사이에 폴링 주기만큼 지연이 더해진다(정합성↔지연). relay 재시도·멀티 relay로 같은 이벤트가 중복 발행될 수 있으나 소비자 멱등(`eventId @unique`)이 흡수한다(**유실 없음은 주지만 중복 없음은 못 줌 = at-least-once**). 무한 재시도(DLQ/최대 횟수)·PUBLISHED 행 정리·CDC 전환은 후속 과제.
 
 ---
 
@@ -163,7 +167,8 @@
 | **M3** ✅ | Kafka 도입 + audit-worker | producer/consumer 첫걸음 |
 | **M4** ✅ | 1:1 채팅 WS + Redis pub/sub + persistence-worker | WS+Redis+Kafka 통합 |
 | **M5** ✅ | notification-worker + WS 푸시 + 미읽음 카운트 (워커별 컨슈머 그룹 분리) | 다중 컨슈머 팬아웃 |
-| **M6** | rate limit · 보안 점검 · (선택) Outbox | 운영·보안 |
+| **M6** ✅ | rate limit · 보안 점검 | 운영·보안 |
+| **Outbox** ✅ | Transactional Outbox(dual-write 유실 제거) + outbox-relay 워커 | 트랜잭션 정합·SKIP LOCKED·at-least-once |
 | **F1** *(추후)* | OAuth 소셜 로그인 | 외부 인증 연동 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
 
@@ -283,7 +288,10 @@ $ npm run start:worker:persistence    # chat-events → Message 적재
 $ npm run start:worker:notification   # chat+board-events → Notification + WS 푸시
 $ npm run start:worker:audit          # 전체 구독 → AuditLog
 
-# 운영 빌드 후에는 start:prod / start:prod:persistence|notification|audit 사용
+# Outbox relay 워커 — PENDING OutboxEvent를 폴링해 Kafka로 발행(board·membership 이벤트의 발행 경로)
+$ npm run start:worker:outbox
+
+# 운영 빌드 후에는 start:prod / start:prod:persistence|notification|audit|outbox 사용
 
 # 테스트
 $ npm run test        # 단위 테스트
