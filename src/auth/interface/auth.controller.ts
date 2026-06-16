@@ -14,6 +14,7 @@ import { CurrentUser } from './current-user.decorator';
 import { TokenPayload } from '../domain/token-issuer';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
 import { SWAGGER_BEARER_AUTH } from '../../common/swagger/swagger.constants';
+import { RateLimit } from '../../common/rate-limit/rate-limit.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -24,6 +25,7 @@ export class AuthController {
   ) {}
 
   @Post('signup')
+  @RateLimit({ ipMax: 10 })
   @ApiOperation({ summary: '회원가입' })
   @ApiResponse({ status: 201, description: '생성된 유저' })
   @ApiResponse({
@@ -42,6 +44,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @RateLimit({ ipMax: 10 })
   @ApiOperation({ summary: '로그인(JWT 발급)' })
   @ApiResponse({ status: 201, description: 'accessToken 반환' })
   @ApiResponse({

@@ -260,6 +260,7 @@
 | `COMMON_VALIDATION_FAILED` | 400 | 요청 검증 실패(DTO) |
 | `VALIDATION_FAILED` | 422 | 도메인 불변식 위반 |
 | `COMMON_UNAUTHORIZED` | 401 | 인증 필요/실패 |
+| `RATE_LIMIT_EXCEEDED` | 429 | 요청이 너무 많음(userId·IP 이중 제한 초과, `Retry-After` 헤더 포함) |
 | `COMMON_INTERNAL_ERROR` | 500 | 서버 오류 |
 
 ---
