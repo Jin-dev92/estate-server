@@ -1,0 +1,42 @@
+name: Version Bump (Manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version-bump:
+    name: Bump version & open PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Compute & apply version bump
+        id: bump
+        run: |
+          chmod +x scripts/bump-version.sh
+          ./scripts/bump-version.sh
+      - name: Create version bump PR
+        if: steps.bump.outputs.new_version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW="${{ steps.bump.outputs.new_version }}"
+          BRANCH="chore/version-bump-${NEW}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add package.json
+          git commit -m "chore: 버전 범프 v${NEW} [skip ci]" || { echo "변경 없음"; exit 0; }
+          git push origin "$BRANCH"
+          gh pr create --base dev --head "$BRANCH" \
+            --title "chore: 버전 범프 v${NEW}" \
+            --body "커밋 타입으로 산정한 버전 범프입니다. 새 버전: \`${NEW}\`. (feat·refactor→minor, 그 외→patch)"
