@@ -8,14 +8,16 @@
 
 ## 1. 목적과 범위
 
-README의 CI 마일스톤은 "부하 smoke 자동화 + 린트·테스트·빌드 등 통합"을 목표로 하지만, **한 번에 다 넣지 않고 단계적으로** 쌓는다. 이번 스펙은 **1단계: 가장 가성비 높은 두 게이트**만 다룬다.
+README의 CI 마일스톤은 "부하 smoke 자동화 + 린트·테스트·빌드 등 통합"을 목표로 하지만, **한 번에 다 넣지 않고 단계적으로** 쌓는다. 이번 스펙은 **1단계**로 다음을 다룬다.
 
-1. **build / typecheck** — `nest build`(=tsc)로 컴파일·타입 검증. 인프라 불필요.
-2. **Prisma 마이그레이션 정합성(drift) 체크** — 빈 PostgreSQL에 마이그레이션이 깨끗이 적용되는지 + `schema.prisma`와 마이그레이션 파일이 어긋나지 않는지(누락 마이그레이션) 검증.
+1. **build / typecheck** — `nest build`(=tsc)로 컴파일·타입 검증. 인프라 불필요. (PR 게이트)
+2. **Prisma 마이그레이션 정합성(drift) 체크** — 빈 PostgreSQL에 마이그레이션이 깨끗이 적용되는지 + `schema.prisma`와 마이그레이션 파일이 어긋나지 않는지(누락 마이그레이션) 검증. (PR 게이트)
+3. **버전 범프(수동)** — 커밋 타입으로 다음 버전을 자동 산정해 `package.json`을 올리고 **PR로 제안**하는 별도 워크플로. (PR 게이트와 성격이 다른 *쓰기* 작업이라 분리.)
 
-이 둘을 고른 이유:
+1·2를 고른 이유:
 - **typecheck:** 최근 작업에서 컴파일 에러(SDK export·타입 불일치)를 사람이 뒤늦게 발견한 적이 있다 → CI가 PR에서 즉시 빨강으로 막는 게 가성비 최고.
 - **마이그레이션 drift:** CLAUDE.md DB 룰("스키마 변경 = 코드 변경", "schema.prisma만 바꾸고 migration.sql 없이 머지 금지", "배포된 마이그레이션 수정 금지")을 **사람 점검 대신 CI가 강제**한다.
+- **버전 범프:** 릴리스 버전을 손으로 올리는 대신 커밋 컨벤션(`기능` 타입)에서 자동 산정 → 일관성. 이전 프로젝트(tatoa)의 수동 트리거·PR 기반 범프 모델을 차용(`package.json` 버전으로 적용). 산정된 버전은 후속 Sentry 릴리스·CD와 연결할 토대.
 
 ### 트리거
 - `pull_request`의 **base가 `dev` 또는 `main`**일 때 실행(머지 전 게이트). feature→dev, dev→main 통합 PR 모두 커버.
@@ -30,6 +32,7 @@ README의 CI 마일스톤은 "부하 smoke 자동화 + 린트·테스트·빌드
 - `schema.prisma`를 바꿨는데 **마이그레이션 파일을 안 만든** PR은 migrations 잡이 red(drift 감지).
 - 깨진/적용 불가 마이그레이션도 migrations 잡이 red(빈 DB 적용 실패).
 - 외부 시크릿 불필요(PG는 일회용 서비스 컨테이너, 자격증명은 throwaway).
+- (수동) 버전 범프 실행 시: 마지막 범프 이후 커밋 타입으로 minor/patch를 산정해 `package.json`을 올린 `chore/version-bump-X.Y.Z` PR이 `dev`로 생성된다(feat·refactor → minor, 그 외 → patch, 없으면 skip).
 
 ---
 
@@ -96,14 +99,41 @@ services:
 
 ---
 
-## 5. 운영 메모 (워크플로 밖)
+## 5. 워크플로: 버전 범프 (수동, 별도)
+
+PR 게이트(1·2)와 달리 **`package.json`을 바꾸는 쓰기 작업**이라 별 파일 `.github/workflows/version-bump.yml`로 분리하고 **수동(`workflow_dispatch`)**으로만 돈다(매 머지 자동 X). 이전 프로젝트(tatoa) 모델 차용.
+
+**흐름**
+| 단계 | 내용 |
+|---|---|
+| 트리거 | `workflow_dispatch` (Actions 탭에서 버튼 실행) |
+| checkout | `dev`, `fetch-depth: 0`(커밋 이력 분석에 필요), 기본 `GITHUB_TOKEN` |
+| 버전 산정 | `scripts/bump-version.sh` — 마지막 범프 커밋 이후 커밋들의 `기능` 타입 분석 |
+| 적용 | `npm pkg set version=<새 버전>`로 `package.json` 갱신 |
+| 제안 | `chore/version-bump-X.Y.Z` 브랜치 커밋(`[skip ci]`)·push → `gh pr create --base dev` |
+
+**버전 단계 산정 (우리 커밋 컨벤션 `[티켓]기능: 설명` 기준)**
+- `feat`·`refactor`가 하나라도 있으면 → **minor++** (patch=0)
+- 그 외(`fix`·`docs`·`test`·`chore`·`style`)만 있으면 → **patch++**
+- 둘 다 없으면 → **범프 안 함**
+- 중복 제거(불린 `has_feature`/`has_patch`). 타입 매칭 정규식은 `[티켓]` prefix(공백 유무 모두) 허용. **major는 수동**(스크립트 자동 범위 밖).
+
+**봇 토큰: 미사용(기본 `GITHUB_TOKEN`).** 보호되지 않은 `chore/version-bump-*` 브랜치 push + PR 생성은 `permissions: contents: write` + `pull-requests: write`로 충분.
+- *트레이드오프:* `GITHUB_TOKEN`이 만든 PR은 **다른 워크플로(CI 게이트)를 자동 트리거하지 않는다** → 범프 PR의 build·migrations 체크는 **수동 재실행**(또는 빈 커밋)으로 돌린다. 범프 PR도 CI를 자동으로 태우려면 그때 **PAT/App 토큰(secret)**으로 교체(= 진짜 관리해야 할 secret).
+- 보호된 `dev`/`main`에 직접 push하지 않고 **PR로 제안**하므로 branch protection·무한 트리거 문제가 없다.
+
+**산출물:** `.github/workflows/version-bump.yml`, `scripts/bump-version.sh`.
+
+---
+
+## 6. 운영 메모 (워크플로 밖)
 
 - **필수 체크 지정:** 이 두 잡을 GitHub 레포 설정의 **branch protection → required status checks**로 등록해야 "red면 머지 불가"가 강제된다. (워크플로 파일이 아니라 레포 설정 — README/PR에 안내.)
 - **시크릿 없음:** 이번 CI는 PAT·DSN·토큰이 필요 없다(서비스 컨테이너 자격증명은 워크플로에 평문 throwaway). 후속 CD 단계에서야 secret 등장.
 
 ---
 
-## 6. 검증 방법
+## 7. 검증 방법
 
 - **양성:** 이 변경으로 PR을 열면 build·migrations 두 잡이 **green**.
 - **음성(직접 확인):**
@@ -121,25 +151,26 @@ services:
 
 ---
 
-## 7. 문서 산출물
+## 8. 문서 산출물
 
-- **README:** 마일스톤 표 `CI` 항목을 "1단계(build·migrate drift) 완료 + 후속(부하 smoke·lint·test·CD) 예정"으로 갱신. §8 실행 방법 근처에 "CI가 PR에서 build·migration drift를 검증한다" 한 줄.
+- **README:** 마일스톤 표 `CI` 항목을 "1단계(build·migrate drift + 수동 버전 범프) 완료 + 후속(부하 smoke·lint·test·CD) 예정"으로 갱신. §8 실행 방법 근처에 "CI가 PR에서 build·migration drift를 검증하고, 수동 워크플로로 버전 범프 PR을 만든다" 한 줄.
 - **학습 노트:** CI 소절 — typecheck 게이트의 가치(컴파일 에러 조기 차단), Prisma drift 체크가 CLAUDE.md DB 룰을 어떻게 강제하는지, service container 개념, `migrate diff --exit-code` 원리.
 - **용어집:** CI/CD·GitHub Actions·service container·required status check·`migrate diff`(drift) 추가.
 
 ---
 
-## 8. 단계별 검증(구현)
+## 9. 단계별 검증(구현)
 
 | 단계 | 산출물 | 검증 |
 |---|---|---|
 | 1 | `.github/workflows/ci.yml`(build 잡) | PR에서 build 잡 green, 타입 에러 시 red |
 | 2 | migrations 잡(서비스 컨테이너 + deploy + diff) | 정상 PR green, 마이그레이션 누락 PR red |
-| 3 | 문서(README·학습 노트·용어집) | 표·소절 갱신 |
+| 3 | `scripts/bump-version.sh` + `version-bump.yml`(수동) | 수동 실행 시 커밋 타입대로 버전 산정·`package.json` 갱신·dev로 PR 생성 |
+| 4 | 문서(README·학습 노트·용어집) | 표·소절 갱신 |
 
 ---
 
-## 9. 트레이드오프 메모 (학습 포인트)
+## 10. 트레이드오프 메모 (학습 포인트)
 
 - **PR 게이트 ↔ 실행 비용:** PR마다 CI를 돌리면 피드백이 빠르지만 분(minute)·러너를 쓴다. `concurrency cancel-in-progress`·npm 캐시·잡 분리(병렬)로 시간을 줄인다.
 - **typecheck = build:** 별도 `tsc --noEmit` 대신 `nest build`로 겸함(빌드 산출물도 컴파일되는지까지 검증). 단 빌드는 generate가 선행돼야 한다(Prisma client 타입).
