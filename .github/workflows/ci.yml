@@ -13,10 +13,10 @@ jobs:
     name: build (typecheck)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - name: Install deps
         run: npm ci
@@ -46,10 +46,10 @@ jobs:
       DATABASE_URL: postgresql://estate:estate@localhost:5432/estate?schema=public
       SHADOW_DATABASE_URL: postgresql://estate:estate@localhost:5432/estate_shadow?schema=public
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
       - name: Install deps
         run: npm ci
