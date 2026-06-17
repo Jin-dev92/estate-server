@@ -1,9 +1,16 @@
 import { ArgumentsHost, HttpStatus, NotFoundException } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 import { AppException } from './app-exception';
 import { DomainError } from './domain-error';
 
-function mockHost(url = '/x'): {
+jest.mock('@sentry/nestjs');
+
+function mockHost(
+  url = '/x',
+  method = 'GET',
+  user?: { sub: string; role: string },
+): {
   host: ArgumentsHost;
   status: jest.Mock;
   json: jest.Mock;
@@ -13,7 +20,7 @@ function mockHost(url = '/x'): {
   const host = {
     switchToHttp: () => ({
       getResponse: () => ({ status }),
-      getRequest: () => ({ url }),
+      getRequest: () => ({ url, method, user }),
     }),
   } as unknown as ArgumentsHost;
   return { host, status, json };
@@ -21,6 +28,8 @@ function mockHost(url = '/x'): {
 
 describe('AllExceptionsFilter', () => {
   const filter = new AllExceptionsFilter();
+
+  afterEach(() => jest.clearAllMocks());
 
   it('AppException → 그 status·code·message 봉투', () => {
     const { host, status, json } = mockHost('/posts/1');
@@ -79,5 +88,32 @@ describe('AllExceptionsFilter', () => {
         code: 'COMMON_INTERNAL_ERROR',
       }),
     );
+  });
+
+  it('5xx는 Sentry.captureException로 보낸다(userId·role 컨텍스트 첨부)', () => {
+    const { host } = mockHost('/posts', 'POST', { sub: 'u1', role: 'OWNER' });
+
+    filter.catch(new Error('boom'), host);
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    // 2번째 인자(scope 콜백)를 mock scope로 실행해 컨텍스트 설정을 검증
+    const scopeCb = (Sentry.captureException as jest.Mock).mock.calls[0][1] as (
+      s: unknown,
+    ) => unknown;
+    const setUser = jest.fn();
+    const setTag = jest.fn();
+    scopeCb({ setUser, setTag });
+    expect(setUser).toHaveBeenCalledWith({ id: 'u1' });
+    expect(setTag).toHaveBeenCalledWith('role', 'OWNER');
+    expect(setTag).toHaveBeenCalledWith('path', '/posts');
+    expect(setTag).toHaveBeenCalledWith('method', 'POST');
+  });
+
+  it('4xx는 Sentry로 보내지 않는다', () => {
+    const { host } = mockHost();
+
+    filter.catch(new NotFoundException('x'), host);
+
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });

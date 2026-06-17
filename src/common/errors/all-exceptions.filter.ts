@@ -7,9 +7,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 import { AppException } from './app-exception';
 import { DomainError } from './domain-error';
 import { ErrorResponse } from './error-response';
+import { TokenPayload } from '../../auth/domain/token-issuer';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -26,6 +28,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `${body.code} ${body.statusCode} ${req.url}`,
         exception instanceof Error ? exception.stack : undefined,
       );
+      // 5xx(미처리/서버 오류)만 Sentry로. 4xx·도메인 예상 예외는 노이즈라 제외.
+      Sentry.captureException(exception, (scope) => {
+        const user = req.user as TokenPayload | undefined;
+        if (user?.sub) scope.setUser({ id: user.sub }); // id만(email=PII 제외)
+        if (user?.role) scope.setTag('role', user.role);
+        scope.setTag('path', req.url);
+        scope.setTag('method', req.method);
+        return scope;
+      });
     }
     res.status(body.statusCode).json(body);
   }
