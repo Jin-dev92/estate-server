@@ -167,10 +167,14 @@ model OutboxEvent {
   topic        String    // 발행 대상 토픽(적재 시 고정)
   partitionKey String    // = entityId, 파티션 순서 보장
   payload      Json      // DomainEvent 전체 봉투
-  status       String    @default("PENDING") // OutboxStatus: PENDING | PUBLISHED
+  status       String    @default("PENDING") // OutboxStatus: PENDING | PUBLISHED | FAILED
   createdAt    DateTime  @default(now())
   publishedAt  DateTime?
-  attempts     Int       @default(0) // 발행 시도 횟수(관측·디버깅)
+  attempts     Int       @default(0) // 발행 시도 횟수
 
-  @@index([status, createdAt]) // 폴링 대상 조회
+  nextAttemptAt DateTime? // 다음 재시도 가능 시각(백오프). NULL=즉시 가능(최초 미시도)
+  lastError     String?   // 마지막 실패 사유(왜 poison인지 — DLQ 사후 조사용)
+  failedAt      DateTime? // FAILED로 격리된 시각
+
+  @@index([status, nextAttemptAt]) // 폴링 대상 조회(백오프 대기 행 제외)
 }
