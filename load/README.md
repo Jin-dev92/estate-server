@@ -47,8 +47,15 @@ open(arrival-rate) 모델이라 closed(VU)와 띄우는 법이 다르다. 로컬
 | 2026-06-16 | login (순수 bcrypt) | smoke 1VU | 114.5 | 0.9 | 0% | bcrypt rounds=10 검증 = CPU 바운드(읽기의 ~17배) |
 | 2026-06-16 | login (부하) | load 20VU | 4.2 | 16.0 | 98.8% | `@RateLimit({ipMax:10})`에 막혀 대부분 429 — "측정이 측정을 방해"(아래) |
 | 2026-06-16 | rate-limit (429 경계) | iter 20 | — | — | — | ipMax=10 → 429 관측 10회. 부하 하에서도 한도 정확 |
+| 2026-06-17 | stress-create (POST, 풀=1) | ramping 10→600 RPS, 40s 유지 | 1734 | 95.1 | 0.23% | throughput 상한 ~95 RPS, P2024 풀 타임아웃 35건(병목=DB 커넥션 풀), dropped 812 |
 
 ### 읽어둘 발견
 - **login은 데코레이터 rate limit 때문에 부하 측정이 막힌다.** `@RateLimit({ipMax:10})`은 라우트에 하드코딩이라 `RATE_LIMIT_*` env 상향으로 안 풀린다 → load에서 ~99% 429. **순수 bcrypt baseline은 smoke(윈도우당 ≤10회)로** 잰다. (이건 보안이 의도대로 동작한다는 증거이기도 하다.)
 - **read 수치는 캐시 최상 시나리오다.** 모든 VU가 같은 building을 읽어 Redis hit이 100%에 가깝다. 실제론 여러 키를 섞어야 현실적 hit/miss가 나온다.
 - **bcrypt가 가장 무겁다**(p95 114ms vs 읽기 7ms). 인증이 CPU 바운드라는 걸 숫자로 확인.
+
+### stress 발견 (M8 — 병목은 latency로 먼저 드러난다)
+- **knee = latency 폭증.** DB 풀을 좁히며 부하를 올리자 p95가 **13.6ms(풀2,250RPS) → 210ms(풀1,400RPS) → 1734ms(풀1,600RPS)** 로 뛰었다. 바꾼 변수는 `connection_limit` 하나뿐 → 병목이 **DB 커넥션 풀**임을 latency 상관으로 확정.
+- **throughput은 풀 용량에서 평평해진다.** 풀=1이면 도착률을 600 RPS로 올려도 실제 처리량은 **~95 RPS**에 고정(= 풀 1개의 처리 한계). "RPS를 더 줘도 안 올라가는 천장"이 곧 용량.
+- **병목을 이름으로:** 충분히 오래 밀자 앱 로그에 `Timed out fetching a new connection from the connection pool (connection limit: 1)`(Prisma P2024)가 35건 → 500. 단, 이 타임아웃은 **큐 대기가 `pool_timeout`을 넘겨야** 떠서, 짧게 밀면 latency만 오르고 타임아웃은 안 난다(자기안정화).
+- **open 모델의 backpressure 위치:** maxVUs가 모자라면 초과분이 `dropped_iterations`로 버려진다(부하가 앱이 아니라 k6 쪽에 쌓임). 한계 탐색 땐 maxVUs를 넉넉히 줘야 앱 큐가 깊어져 진짜 한계가 보인다.
