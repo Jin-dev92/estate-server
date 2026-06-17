@@ -35,6 +35,7 @@
 | **실시간 통신** | WebSocket (NestJS Gateway) | 1:1 채팅·알림 푸시 |
 | **아키텍처** | DDD (도메인 주도 설계) | 바운디드 컨텍스트 + 레이어드 구조 |
 | **테스트/품질** | Jest, ESLint, Prettier | 단위·e2e 테스트, 정적 검사 |
+| **부하테스트** | k6 | 핵심 엔드포인트 성능 baseline(p95·RPS·에러율) 측정 (M7) |
 
 ---
 
@@ -68,6 +69,37 @@
 - **RBAC + 리소스 소유권 검사** 이중 인가 (역할만 보지 않고 "이 건물/방/글의 소유자인가"까지 확인)
 - **백엔드 rate limit** (userId + IP 이중 제한)
 - 민감정보(JWT 시크릿, DB/Kafka/Redis 접속 정보)는 서버 환경변수로만 관리
+
+### 성능·부하테스트 (k6, M7)
+- 성격이 다른 대표 엔드포인트를 [k6](https://k6.io)로 재 **성능 baseline** 확보 — 평균이 아니라 **p95/p99**(꼬리 지연)로 본다
+- 합격 기준을 `thresholds`로 **코드화**(예: `p(95)<300ms`, 실패율 `<1%`) → 미달 시 k6가 exit≠0
+- **smoke**(정상성) / **load**(baseline) 프로파일, think time으로 "현실적 동시 사용자" 측정
+- 부하테스트의 전형적 딜레마 **"측정이 측정을 방해"** 를 직접 마주침 — rate limit이 부하를 막음
+
+---
+
+## 3.5 부하테스트 결과 (M7 baseline)
+
+> 로컬 단일 머신(앱+PG+Redis+Kafka 동시 구동) 기준 — 절대치가 아니라 **상대 비교·회귀 감지**용. 실행법·전체 표·발견은 [`load/README.md`](load/README.md), 개념 정리는 [학습 노트 §8.5](docs/study/마일스톤-학습-노트.md).
+
+| 시나리오 | 프로파일 | p95 | 에러율 | 무엇을 보나 |
+|---|---|---|---|---|
+| `GET /buildings/:id/posts` | load 20VU | **6.9ms** | 0% | Redis read-through 캐시 읽기 |
+| `POST /buildings/:id/posts` | load 20VU | **19.6ms** | 0% | DB+Outbox 한 트랜잭션 쓰기 |
+| `POST /auth/login` (순수) | smoke 1VU | **114ms** | 0% | bcrypt 검증 = CPU 바운드(읽기의 ~17배) |
+| rate-limit 경계 | iter 20 | — | — | ipMax=10 → 429 관측 10회(한도 정확) |
+
+- **bcrypt(로그인)가 가장 무겁다**(114ms vs 읽기 7ms) — 인증이 CPU 바운드라는 걸 숫자로 확인.
+- **login 부하는 측정 불가:** login 라우트의 `@RateLimit({ipMax:10})`이 데코레이터 하드코딩이라 env 한도 상향으로 못 푼다 → 부하 시 ~99%가 429. *우리 rate limit이 의도대로 막는다는 증거*라, 순수 속도는 smoke로 따로 쟀다.
+- **캐시 과대평가 주의:** 모든 VU가 같은 building을 읽어 Redis hit이 ~100% → 위 6.9ms는 캐시 최상 시나리오다.
+
+**실행 요약**(자세히는 `load/README.md`):
+```bash
+docker compose up -d && npm run build
+RATE_LIMIT_USER_MAX=1000000 RATE_LIMIT_IP_MAX=1000000 node dist/main.js   # 부하 측정 시 한도 상향
+npm run load:seed                  # 부하용 시드(OWNER·건물·글)
+PROFILE=load npm run load:read     # load:create / load:login / load:ratelimit
+```
 
 ---
 
