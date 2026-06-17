@@ -12,6 +12,8 @@ import { AppException } from './app-exception';
 import { DomainError } from './domain-error';
 import { ErrorResponse } from './error-response';
 import { TokenPayload } from '../../auth/domain/token-issuer';
+import { ConfigKey } from '../../config/config-keys';
+import { shouldCapture4xx } from '../sentry/should-capture-4xx';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -30,15 +32,36 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
       // 5xx(미처리/서버 오류)만 Sentry로. 4xx·도메인 예상 예외는 노이즈라 제외.
       Sentry.captureException(exception, (scope) => {
-        const user = req.user as TokenPayload | undefined;
-        if (user?.sub) scope.setUser({ id: user.sub }); // id만(email=PII 제외)
-        if (user?.role) scope.setTag('role', user.role);
-        scope.setTag('path', req.url);
-        scope.setTag('method', req.method);
+        this.applyContext(scope, req);
+        return scope;
+      });
+    } else if (
+      // 일부 4xx(422·400 검증 = FE/계약 버그 신호)는 낮은 샘플로만 캡처(기본 0=off).
+      shouldCapture4xx(body.code, this.sample4xxRate())
+    ) {
+      Sentry.captureException(exception, (scope) => {
+        scope.setLevel('warning'); // 5xx(error)와 구분
+        scope.setTag('capture_reason', 'sampled_4xx');
+        scope.setTag('code', body.code);
+        this.applyContext(scope, req);
         return scope;
       });
     }
     res.status(body.statusCode).json(body);
+  }
+
+  // Sentry scope에 요청 컨텍스트(누가·어디로)를 싣는다. email은 PII라 제외.
+  private applyContext(scope: Sentry.Scope, req: Request): void {
+    const user = req.user as TokenPayload | undefined;
+    if (user?.sub) scope.setUser({ id: user.sub });
+    if (user?.role) scope.setTag('role', user.role);
+    scope.setTag('path', req.url);
+    scope.setTag('method', req.method);
+  }
+
+  // 4xx 샘플 캡처 비율(env). 기본 0 = 끔. 배포 직후·디버깅 때만 올린다.
+  private sample4xxRate(): number {
+    return Number(process.env[ConfigKey.Sentry4xxSampleRate]) || 0;
   }
 
   private toErrorResponse(exception: unknown, path: string): ErrorResponse {

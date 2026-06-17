@@ -109,11 +109,32 @@ describe('AllExceptionsFilter', () => {
     expect(setTag).toHaveBeenCalledWith('method', 'POST');
   });
 
-  it('4xx는 Sentry로 보내지 않는다', () => {
+  it('4xx는 (샘플 비율 0이면) Sentry로 보내지 않는다', () => {
     const { host } = mockHost();
 
     filter.catch(new NotFoundException('x'), host);
 
     expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('대상 4xx(422 검증)는 샘플 비율이 켜지면 warning으로 캡처한다', () => {
+    process.env.SENTRY_4XX_SAMPLE_RATE = '1';
+    const { host } = mockHost('/posts', 'POST', { sub: 'u1', role: 'OWNER' });
+
+    filter.catch(new DomainError('제목은 필수입니다.'), host);
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    const scopeCb = (Sentry.captureException as jest.Mock).mock.calls[0][1] as (
+      s: unknown,
+    ) => unknown;
+    const setLevel = jest.fn();
+    const setTag = jest.fn();
+    const setUser = jest.fn();
+    scopeCb({ setLevel, setTag, setUser });
+    expect(setLevel).toHaveBeenCalledWith('warning');
+    expect(setTag).toHaveBeenCalledWith('capture_reason', 'sampled_4xx');
+    expect(setTag).toHaveBeenCalledWith('code', 'VALIDATION_FAILED');
+
+    delete process.env.SENTRY_4XX_SAMPLE_RATE;
   });
 });

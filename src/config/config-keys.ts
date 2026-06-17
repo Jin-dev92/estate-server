@@ -22,4 +22,5 @@ export const enum ConfigKey {
   SentryDsn = 'SENTRY_DSN',
   SentryEnvironment = 'SENTRY_ENVIRONMENT',
   SentryTracesSampleRate = 'SENTRY_TRACES_SAMPLE_RATE',
+  Sentry4xxSampleRate = 'SENTRY_4XX_SAMPLE_RATE',
 }
