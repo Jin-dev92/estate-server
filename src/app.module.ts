@@ -15,6 +15,8 @@ import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
+    // Sentry는 main.ts 부트스트랩의 initSentry()로 초기화한다(@sentry/nestjs v10은
+    // 별도 모듈 없이 init의 nestIntegration/httpIntegration이 자동 계측).
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     RedisModule,

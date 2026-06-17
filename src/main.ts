@@ -3,8 +3,21 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { KafkaTopicInitializer } from './events/kafka-topic-initializer';
 import { setupSwagger } from './common/swagger/setup-swagger';
+import { initSentry } from './common/sentry/init-sentry';
+import { ConfigKey } from './config/config-keys';
 
 async function bootstrap() {
+  // Sentry는 가능한 한 일찍 init(런타임·HTTP 계측이 붙도록). DSN 없으면 no-op.
+  initSentry({
+    dsn: process.env[ConfigKey.SentryDsn] ?? '',
+    environment:
+      process.env[ConfigKey.SentryEnvironment] ??
+      process.env.NODE_ENV ??
+      'development',
+    tracesSampleRate:
+      Number(process.env[ConfigKey.SentryTracesSampleRate]) || 0.1,
+  });
+
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
