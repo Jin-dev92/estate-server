@@ -358,3 +358,5 @@ $ npm run load:read   # GET 목록 / load:create, load:login, load:ratelimit
 
 - 📄 **[전체 설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)** — 도메인 모델, 기능별 설계, Kafka 토픽/컨슈머, DDD 레이어 구조 등 **결정과 구조의 상세**가 정리되어 있습니다. (위 §5 설계 결정의 배경 문서)
 - 🗺️ **[M0 구현 계획](docs/superpowers/plans/2026-06-12-m0-foundation-auth.md)** — 전체 로드맵 + M0(인프라·Prisma·JWT 인증)의 TDD 단계별 계획.
+- 📒 **[마일스톤 학습 노트](docs/study/마일스톤-학습-노트.md)** — 마일스톤별 "왜 그렇게 했는가"·트레이드오프·스스로 점검.
+- 📖 **[용어집(Glossary)](docs/study/용어집.md)** — 마일스톤 전반에 등장한 용어를 카테고리별로 한눈에(DDD·Redis·Kafka·정합성·부하테스트 등).
