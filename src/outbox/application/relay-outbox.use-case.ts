@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { EVENT_PUBLISHER, EventPublisher } from '../../events/event-publisher';
 import { OUTBOX_STORE, OutboxStore } from '../domain/outbox-store';
 import {
@@ -42,6 +43,14 @@ export class RelayOutboxUseCase {
             this.logger.error(
               `outbox 발행 영구 실패(FAILED 격리): ${row.eventId} attempts=${row.attempts + 1} ${message}`,
             );
+            // poison(영구 실패)을 운영 가시화 — M9 ERROR 로그의 Sentry판.
+            // 일시 실패(else, 재시도 예정)는 노이즈라 보내지 않는다.
+            Sentry.captureException(err, (scope) => {
+              scope.setTag('eventId', row.eventId);
+              scope.setTag('eventType', row.eventType);
+              scope.setTag('attempts', String(row.attempts + 1));
+              return scope;
+            });
           } else {
             this.logger.warn(
               `outbox 발행 실패(백오프 후 재시도): ${row.eventId} ${message}`,
