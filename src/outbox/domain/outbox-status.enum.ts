@@ -2,4 +2,5 @@
 export const enum OutboxStatus {
   Pending = 'PENDING',
   Published = 'PUBLISHED',
+  Failed = 'FAILED', // 최대 재시도 초과로 격리된 poison message(더는 폴링 안 함)
 }
