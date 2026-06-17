@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { RelayOutboxUseCase } from './relay-outbox.use-case';
 import { OutboxStore } from '../domain/outbox-store';
 import {
@@ -9,6 +10,8 @@ import { OutboxRecord } from '../domain/outbox-record';
 import { EventPublisher } from '../../events/event-publisher';
 import { DomainEvent } from '../../events/domain-event';
 import { EventType, EntityType } from '../../events/event-type.enum';
+
+jest.mock('@sentry/nestjs');
 
 const TX = {} as TransactionClient;
 
@@ -128,6 +131,8 @@ describe('RelayOutboxUseCase', () => {
     expect(errorSpy.mock.calls[0][0]).toContain('FAILED 격리');
     errorSpy.mockRestore();
     expect(published).toEqual([]);
+    // poison 격리는 Sentry로도 보낸다(일시 실패는 안 보냄).
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 
   it('PENDING이 없으면 아무것도 발행하지 않는다', async () => {

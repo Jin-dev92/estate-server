@@ -19,4 +19,8 @@ export const enum ConfigKey {
   OutboxMaxAttempts = 'OUTBOX_MAX_ATTEMPTS',
   OutboxBackoffBaseMs = 'OUTBOX_BACKOFF_BASE_MS',
   OutboxBackoffCapMs = 'OUTBOX_BACKOFF_CAP_MS',
+  SentryDsn = 'SENTRY_DSN',
+  SentryEnvironment = 'SENTRY_ENVIRONMENT',
+  SentryTracesSampleRate = 'SENTRY_TRACES_SAMPLE_RATE',
+  Sentry4xxSampleRate = 'SENTRY_4XX_SAMPLE_RATE',
 }
