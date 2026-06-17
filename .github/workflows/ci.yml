@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      - name: Build (tsc typecheck)
+        run: npm run build
+
+  migrations:
+    name: migrations (prisma drift)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: estate
+          POSTGRES_PASSWORD: estate
+          POSTGRES_DB: estate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U estate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://estate:estate@localhost:5432/estate?schema=public
+      SHADOW_DATABASE_URL: postgresql://estate:estate@localhost:5432/estate_shadow?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install deps
+        run: npm ci
+      - name: Create shadow database (for migrate diff)
+        run: PGPASSWORD=estate psql -h localhost -U estate -d estate -c "CREATE DATABASE estate_shadow;"
+      - name: Apply migrations to a fresh DB
+        run: npx prisma migrate deploy
+      - name: Check schema vs migrations drift
+        run: |
+          npx prisma migrate diff \
+            --from-migrations ./prisma/migrations \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --exit-code
