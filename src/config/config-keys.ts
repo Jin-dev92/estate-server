@@ -16,4 +16,7 @@ export const enum ConfigKey {
   RateLimitIpMax = 'RATE_LIMIT_IP_MAX',
   OutboxPollMs = 'OUTBOX_POLL_MS',
   OutboxBatchSize = 'OUTBOX_BATCH_SIZE',
+  OutboxMaxAttempts = 'OUTBOX_MAX_ATTEMPTS',
+  OutboxBackoffBaseMs = 'OUTBOX_BACKOFF_BASE_MS',
+  OutboxBackoffCapMs = 'OUTBOX_BACKOFF_CAP_MS',
 }

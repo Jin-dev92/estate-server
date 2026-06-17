@@ -5,7 +5,12 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { KafkaModule } from '../events/kafka.module';
 import { TRANSACTION_RUNNER } from './domain/transaction-runner';
 import { OUTBOX_STORE } from './domain/outbox-store';
-import { OUTBOX_BATCH_SIZE } from './application/outbox.tokens';
+import {
+  OUTBOX_BATCH_SIZE,
+  OUTBOX_MAX_ATTEMPTS,
+  OUTBOX_BACKOFF_BASE_MS,
+  OUTBOX_BACKOFF_CAP_MS,
+} from './application/outbox.tokens';
 import { PrismaTransactionRunner } from './infrastructure/prisma-transaction-runner';
 import { PrismaOutboxStore } from './infrastructure/prisma-outbox-store';
 import { RelayOutboxUseCase } from './application/relay-outbox.use-case';
@@ -29,6 +34,24 @@ import { RelayOutboxUseCase } from './application/relay-outbox.use-case';
       inject: [ConfigService],
       useFactory: (config: ConfigService) =>
         Number(config.get<string>(ConfigKey.OutboxBatchSize)) || 100,
+    },
+    {
+      provide: OUTBOX_MAX_ATTEMPTS,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        Number(config.get<string>(ConfigKey.OutboxMaxAttempts)) || 5,
+    },
+    {
+      provide: OUTBOX_BACKOFF_BASE_MS,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        Number(config.get<string>(ConfigKey.OutboxBackoffBaseMs)) || 1000,
+    },
+    {
+      provide: OUTBOX_BACKOFF_CAP_MS,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        Number(config.get<string>(ConfigKey.OutboxBackoffCapMs)) || 60000,
     },
     RelayOutboxUseCase,
   ],
