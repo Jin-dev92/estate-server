@@ -11,6 +11,12 @@ export interface OutboxStore {
   fetchPending(limit: number, tx: TransactionClient): Promise<OutboxRecord[]>;
   // 발행 성공: PUBLISHED + publishedAt.
   markPublished(id: string, tx: TransactionClient): Promise<void>;
-  // 발행 실패: attempts += 1 (status는 PENDING 유지 → 다음 폴링 재시도).
-  markFailed(id: string, tx: TransactionClient): Promise<void>;
+  // 발행 실패: attempts+1. 최대 횟수 미만이면 백오프(nextAttemptAt) 후 재시도,
+  // 도달하면 FAILED로 격리한다. 격리 여부를 { quarantined }로 돌려준다(use-case가 로깅).
+  markFailed(
+    id: string,
+    attempts: number,
+    error: string,
+    tx: TransactionClient,
+  ): Promise<{ quarantined: boolean }>;
 }

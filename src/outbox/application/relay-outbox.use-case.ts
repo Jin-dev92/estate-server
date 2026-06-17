@@ -28,11 +28,25 @@ export class RelayOutboxUseCase {
           await this.publisher.publishOrThrow(row.payload);
           await this.outbox.markPublished(row.id, tx);
         } catch (err) {
-          // emit 실패: status 유지(attempts++) → 다음 폴링 재시도. 한 행 실패가 배치를 막지 않음.
-          this.logger.warn(
-            `outbox 발행 실패(재시도 예정): ${row.eventId} ${(err as Error).message}`,
+          // emit 실패: store가 백오프 재스케줄 vs FAILED 격리를 결정한다.
+          // 한 행 실패가 배치를 막지 않도록 per-row로 처리한다.
+          const message = (err as Error).message;
+          const { quarantined } = await this.outbox.markFailed(
+            row.id,
+            row.attempts,
+            message,
+            tx,
           );
-          await this.outbox.markFailed(row.id, tx);
+          if (quarantined) {
+            // poison message: 더는 재시도하지 않고 DLQ(FAILED)로 격리됨.
+            this.logger.error(
+              `outbox 발행 영구 실패(FAILED 격리): ${row.eventId} attempts=${row.attempts + 1} ${message}`,
+            );
+          } else {
+            this.logger.warn(
+              `outbox 발행 실패(백오프 후 재시도): ${row.eventId} ${message}`,
+            );
+          }
         }
       }
     });

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DomainEvent } from '../../events/domain-event';
 import { topicForEvent } from '../../events/event-type.enum';
@@ -6,6 +6,12 @@ import { OutboxStatus } from '../domain/outbox-status.enum';
 import { OutboxRecord } from '../domain/outbox-record';
 import { OutboxStore } from '../domain/outbox-store';
 import { TransactionClient } from '../domain/transaction-runner';
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  OUTBOX_BACKOFF_BASE_MS,
+  OUTBOX_BACKOFF_CAP_MS,
+} from '../application/outbox.tokens';
+import { computeBackoff } from '../domain/backoff';
 
 // fetchPending이 raw 쿼리로 받는 행 형태.
 interface OutboxRow {
@@ -20,6 +26,12 @@ interface OutboxRow {
 
 @Injectable()
 export class PrismaOutboxStore implements OutboxStore {
+  constructor(
+    @Inject(OUTBOX_MAX_ATTEMPTS) private readonly maxAttempts: number,
+    @Inject(OUTBOX_BACKOFF_BASE_MS) private readonly baseMs: number,
+    @Inject(OUTBOX_BACKOFF_CAP_MS) private readonly capMs: number,
+  ) {}
+
   async add(event: DomainEvent, tx: TransactionClient): Promise<void> {
     await tx.outboxEvent.create({
       data: {
@@ -43,6 +55,7 @@ export class PrismaOutboxStore implements OutboxStore {
       SELECT id, "eventId", "eventType", topic, "partitionKey", payload, attempts
       FROM "OutboxEvent"
       WHERE status = ${OutboxStatus.Pending}
+        AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= now())
       ORDER BY "createdAt" ASC
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
@@ -65,11 +78,36 @@ export class PrismaOutboxStore implements OutboxStore {
     });
   }
 
-  async markFailed(id: string, tx: TransactionClient): Promise<void> {
-    // status는 PENDING 유지 → 다음 폴링에 재시도. attempts만 증가(관측).
+  async markFailed(
+    id: string,
+    attempts: number,
+    error: string,
+    tx: TransactionClient,
+  ): Promise<{ quarantined: boolean }> {
+    const nextAttempts = attempts + 1;
+    // 최대 도달 → FAILED로 격리(더는 폴링되지 않는다).
+    if (nextAttempts >= this.maxAttempts) {
+      await tx.outboxEvent.update({
+        where: { id },
+        data: {
+          status: OutboxStatus.Failed,
+          attempts: nextAttempts,
+          lastError: error,
+          failedAt: new Date(),
+        },
+      });
+      return { quarantined: true };
+    }
+    // 아직 여유 → 지수 백오프 후 재시도(status는 PENDING 유지).
+    const delayMs = computeBackoff(attempts, this.baseMs, this.capMs);
     await tx.outboxEvent.update({
       where: { id },
-      data: { attempts: { increment: 1 } },
+      data: {
+        attempts: nextAttempts,
+        lastError: error,
+        nextAttemptAt: new Date(Date.now() + delayMs),
+      },
     });
+    return { quarantined: false };
   }
 }
