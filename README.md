@@ -211,7 +211,7 @@ PROFILE=load npm run load:read     # load:create / load:login / load:ratelimit
 | **M9** ✅ | Outbox 견고화: DLQ(FAILED 격리)·재시도 백오프 | poison message·지수 백오프·운영 견고함 |
 | **M10** ✅ | Sentry 연동 — 에러 추적 + 성능 모니터링 | observability·트랜잭션/스팬·PII 스크러빙·외부 SaaS |
 | **M10.5** *(예정)* | 분산 트레이싱(HTTP→Kafka→워커) | 트레이스 컨텍스트 전파·Outbox 연계 |
-| **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 | GitHub Actions·서비스 컨테이너·migrate diff |
+| **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 + Claude 자동 PR 리뷰 | GitHub Actions·서비스 컨테이너·migrate diff·claude-code-action |
 | **F1** *(추후)* | OAuth 소셜 로그인 | 외부 인증 연동 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
 
