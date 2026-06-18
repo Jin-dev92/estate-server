@@ -1,0 +1,143 @@
+# =============================================================================
+# Claude 자동 PR 리뷰 (anthropics/claude-code-action)
+#
+# PR이 열리거나 draft→ready 전환 시, Claude가 변경분을 우리 프로젝트 규칙
+# (CLAUDE.md·README·스펙)에 비춰 리뷰하고 한국어 코멘트를 남긴다.
+#
+# 과금: CLAUDE_CODE_OAUTH_TOKEN(= `claude setup-token`, Pro/Max 구독) 경로라
+#       OpenAI 종량제처럼 건당 청구가 아니라 구독 사용량으로 돈다.
+#       (codex-review.yml은 OpenAI 종량제라 비활성 보존 — 이 워크플로가 활성 리뷰)
+#
+# 선행(레포 1회 설정): docs/ci/claude-pr-review.md 참조
+#   1) github.com/apps/claude 에서 Claude GitHub App 설치(이 레포 연결)
+#   2) `claude setup-token` 출력값을 Secret CLAUDE_CODE_OAUTH_TOKEN 으로 등록
+#   3) (선택) Notion 참조 시 Secret NOTION_API_KEY 등록 — 빈값이면 Notion 미참조
+#
+# 주의: 이 워크플로를 "추가하는" PR에서는 GitHub 보안 정책상 실행되지 않는다.
+#       dev에 머지된 뒤 다음 PR부터 작동한다.
+# =============================================================================
+
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+    branches:
+      - dev
+      - main
+    paths:
+      - "src/**/*.ts"
+      - "prisma/**"
+      - "test/**/*.ts"
+
+# 같은 PR에서 이전 리뷰가 돌고 있으면 취소
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+# 최소 권한: 코드 읽기 + PR 코멘트 쓰기 (+ action OIDC)
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  review:
+    # draft PR은 리뷰하지 않음
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # base 대비 diff·맥락을 위해 전체 히스토리
+
+      # PR 본문에 Notion 링크가 있고 NOTION_API_KEY가 설정돼 있을 때만 Notion 참조.
+      # 키가 빈값이면 has_notion=false → Notion 관련 스텝 전부 스킵.
+      - name: Check for Notion URL in PR (and key present)
+        id: check-notion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        run: |
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q .body)
+          if [ -n "$NOTION_API_KEY" ] && echo "$PR_BODY" | grep -qiE "notion\.so|notion\.site"; then
+            echo "has_notion=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_notion=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js for Notion MCP
+        if: steps.check-notion.outputs.has_notion == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install Notion MCP Server
+        if: steps.check-notion.outputs.has_notion == 'true'
+        run: npm install -g @notionhq/notion-mcp-server
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            당신은 estate-server(NestJS · Prisma · Redis · Kafka, DDD 레이어드)
+            백엔드의 PR 리뷰어입니다. **리뷰는 한국어로** 작성하세요.
+
+            ## 먼저 읽을 문서 (프로젝트 규칙·맥락)
+            - **CLAUDE.md** — 코드 컨벤션(매직스트링 금지 → `ConfigKey`/상수),
+              커밋 규칙, API 문서화·Swagger 필수 규칙, 보안 원칙(RLS·rate limit·
+              API키 노출 금지·RBAC)
+            - **README.md** — 아키텍처·API 표·마일스톤
+            - **docs/superpowers/specs/** — 해당 기능의 설계 스펙
+            - **docs/study/** — 학습 노트("왜 그렇게 했는가")
+
+            ## Notion 참조 (PR 본문에 notion 링크가 있을 때만)
+            `gh pr view --json body`로 본문을 확인하고, notion URL이 있으면
+            Notion MCP 도구로 페이지를 읽어 요구사항·맥락을 리뷰에 반영하세요.
+
+            ## 리뷰 중점 (이 프로젝트 특화)
+            1. **기능 정확성** — 요구사항/스펙 충족, 비즈니스 로직, 엣지 케이스
+            2. **버그·안정성** — Prisma 트랜잭션 경계(애그리거트=트랜잭션 경계),
+               null/Optional, 예외 → 전역 에러 봉투(`code` 계약) 일관성, 동시성
+            3. **성능** — Prisma N+1(include/select), 인덱스, Redis 캐시 무효화
+               타이밍, 불필요한 DB 호출
+            4. **이벤트/분산** — Kafka at-least-once 전제의 **멱등 소비**
+               (고유키/upsert), 파티션 키로 순서 보장, Outbox/DLQ, Redis 원자성(Lua)
+            5. **보안** — RBAC + 리소스 **소유권** 이중 인가, rate limit(userId+IP,
+               백엔드), 민감 키/시크릿 노출 금지, RLS 원칙
+            6. **테스트** — 단위/e2e 존재, AAA 패턴, mock 규칙(`as any` 금지·
+               `Partial<jest.Mocked<T>>`), happy/edge/error 케이스
+            7. **코드 품질·컨벤션** — 매직스트링 → `ConfigKey`/상수, DRY, 가독성
+               (메서드 길이·네이밍), 적절한 추상화 레벨
+            8. **아키텍처(DDD) 위반** — 이 프로젝트의 핵심 설계이므로 엄격히 본다
+               - **레이어 단방향 의존**: `domain`은 `infrastructure`(Prisma·Redis·
+                 Kafka)나 Nest/HTTP를 import하지 않는다. 도메인은 포트(인터페이스)에만
+                 의존하고 구현체는 infrastructure에 둔다(의존성 역전). 계층 건너뜀
+                 (예: controller가 repository를 직접 호출)도 위반
+               - **바운디드 컨텍스트 경계**: 다른 컨텍스트(Auth·Property·Board·Chat·
+                 Notification·Audit)의 내부 모듈/엔티티를 직접 import하지 않는다 —
+                 컨텍스트 간은 도메인 이벤트로 느슨하게 연결
+               - **애그리거트 = 트랜잭션 = 정합성 경계**: 한 트랜잭션에서 여러
+                 애그리거트를 직접 변경하지 않는다
+               - **도메인 로직 누수**: 비즈니스 규칙이 controller·infrastructure·DTO로
+                 새지 않고 domain/application에 응집(anemic domain 지양)
+            9. **문서화** — 신규/변경 엔드포인트의 **Swagger 데코레이터 필수**
+               (`@ApiTags`/`@ApiOperation`/`@ApiResponse`, enum은 명명 스키마),
+               README API 표 갱신, PR 본문에 기획/스펙 문서 링크
+
+            ## 실행 방법
+            1. `gh pr view --json body,title`로 PR 정보 확인
+            2. (notion 링크가 있으면) Notion 페이지 읽기
+            3. `gh pr diff`로 변경 사항 확인
+            4. 위 9개 관점으로 **한국어** 리뷰 작성 — 발견은 `파일:라인`으로 짚고,
+               심각도(🔴 블로커 / 🟡 중요 / 🟢 제안)를 표기, 잘한 점도 한 줄
+            5. `gh pr comment`로 리뷰 코멘트 등록
+
+          claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr list:*),mcp__notion__API-retrieve-a-page,mcp__notion__API-get-block-children,mcp__notion__API-post-search"'
