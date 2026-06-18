@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import { ClientKafka } from '@nestjs/microservices';
 import { KafkaEventPublisher } from './kafka-event.publisher';
@@ -63,9 +64,14 @@ describe('KafkaEventPublisher', () => {
   });
 
   it('발행이 실패해도 throw하지 않는다(after-commit 한계, 로깅만)', async () => {
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     client.emit.mockReturnValue(throwError(() => new Error('broker down')));
 
     await expect(publisher.publish(eventOf())).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   describe('publishOrThrow — Outbox relay 전용 계약', () => {

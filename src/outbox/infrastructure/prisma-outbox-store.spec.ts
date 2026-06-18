@@ -113,8 +113,10 @@ describe('PrismaOutboxStore', () => {
 
     expect(queryRaw).toHaveBeenCalledTimes(1);
     // 백오프 필터·SKIP LOCKED가 실제 쿼리에 들어가는지 SQL 텍스트로 가드(회귀 방지).
-    const sql = (queryRaw.mock.calls[0][0] as { sql: string }).sql;
-    expect(sql).toContain('"nextAttemptAt" IS NULL OR "nextAttemptAt" <= now()');
+    const sql = (queryRaw.mock.calls as Array<[{ sql: string }]>)[0][0].sql;
+    expect(sql).toContain(
+      '"nextAttemptAt" IS NULL OR "nextAttemptAt" <= now()',
+    );
     expect(sql).toContain('FOR UPDATE SKIP LOCKED');
     expect(rows).toEqual([
       {

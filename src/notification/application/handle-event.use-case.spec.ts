@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { HandleEventUseCase } from './handle-event.use-case';
 import { RecipientResolver } from '../domain/recipient-resolver';
 import { NotificationRepository } from '../domain/notification.repository';
@@ -118,6 +119,9 @@ describe('HandleEventUseCase', () => {
   });
 
   it('푸시(relay.publish)가 실패해도 throw하지 않고 적재·INCR은 유지된다(best-effort)', async () => {
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     const { resolver, repo, counter, incremented } = deps(['owner1']);
     const failingRelay: NotificationRelay = {
       publish: () => Promise.reject(new Error('redis down')),
@@ -132,5 +136,7 @@ describe('HandleEventUseCase', () => {
 
     await expect(useCase.execute(POST_EVENT)).resolves.toBeUndefined();
     expect(incremented).toEqual(['owner1']);
+    expect(warnSpy).toHaveBeenCalledWith('알림 푸시 실패: redis down');
+    warnSpy.mockRestore();
   });
 });

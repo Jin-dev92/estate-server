@@ -26,7 +26,7 @@ describe('initSentry', () => {
 
     expect(enabled).toBe(true);
     expect(Sentry.init).toHaveBeenCalledTimes(1);
-    const opts = (Sentry.init as jest.Mock).mock.calls[0][0] as Record<
+    const opts = jest.mocked(Sentry.init).mock.calls[0][0] as Record<
       string,
       unknown
     >;

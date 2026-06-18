@@ -1,4 +1,9 @@
-import { ArgumentsHost, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  HttpStatus,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 import { AppException } from './app-exception';
@@ -77,6 +82,9 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('알 수 없는 Error → 500 COMMON_INTERNAL_ERROR', () => {
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const { host, status, json } = mockHost();
 
     filter.catch(new Error('boom'), host);
@@ -88,16 +96,21 @@ describe('AllExceptionsFilter', () => {
         code: 'COMMON_INTERNAL_ERROR',
       }),
     );
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('5xx는 Sentry.captureException로 보낸다(userId·role 컨텍스트 첨부)', () => {
+    const errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const { host } = mockHost('/posts', 'POST', { sub: 'u1', role: 'OWNER' });
 
     filter.catch(new Error('boom'), host);
 
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     // 2번째 인자(scope 콜백)를 mock scope로 실행해 컨텍스트 설정을 검증
-    const scopeCb = (Sentry.captureException as jest.Mock).mock.calls[0][1] as (
+    const scopeCb = jest.mocked(Sentry.captureException).mock.calls[0][1] as (
       s: unknown,
     ) => unknown;
     const setUser = jest.fn();
@@ -107,6 +120,8 @@ describe('AllExceptionsFilter', () => {
     expect(setTag).toHaveBeenCalledWith('role', 'OWNER');
     expect(setTag).toHaveBeenCalledWith('path', '/posts');
     expect(setTag).toHaveBeenCalledWith('method', 'POST');
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('4xx는 (샘플 비율 0이면) Sentry로 보내지 않는다', () => {
@@ -124,7 +139,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(new DomainError('제목은 필수입니다.'), host);
 
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-    const scopeCb = (Sentry.captureException as jest.Mock).mock.calls[0][1] as (
+    const scopeCb = jest.mocked(Sentry.captureException).mock.calls[0][1] as (
       s: unknown,
     ) => unknown;
     const setLevel = jest.fn();
