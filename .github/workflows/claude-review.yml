@@ -83,6 +83,8 @@ jobs:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # TEMP(디버그): 숨겨진 실행 출력을 로그에 노출 — 인증/실패 원인 진단용. 확인 후 제거.
+          show_full_output: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
