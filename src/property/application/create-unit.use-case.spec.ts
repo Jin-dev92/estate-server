@@ -26,6 +26,7 @@ const unitRepo: UnitRepository = {
       }),
     ),
   findById: () => Promise.resolve(null),
+  findByBuilding: () => Promise.resolve([]),
 };
 
 const ownedBuilding = Building.reconstitute({

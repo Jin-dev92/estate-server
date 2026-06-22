@@ -66,6 +66,7 @@ function deps(opts: { lease?: Lease | null; ownerId?: string } = {}) {
   const units: UnitRepository = {
     save: (u) => Promise.resolve(u),
     findById: () => Promise.resolve(unit),
+    findByBuilding: () => Promise.resolve([]),
   };
   const buildings: Partial<BuildingRepository> = {
     findById: () => Promise.resolve(building),

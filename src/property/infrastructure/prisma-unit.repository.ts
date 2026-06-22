@@ -36,4 +36,18 @@ export class PrismaUnitRepository implements UnitRepository {
       floor: row.floor,
     });
   }
+
+  async findByBuilding(buildingId: string): Promise<Unit[]> {
+    const rows = await this.prisma.unit.findMany({
+      where: { buildingId, deletedAt: null },
+    });
+    return rows.map((row) =>
+      Unit.reconstitute({
+        id: row.id,
+        buildingId: row.buildingId,
+        name: row.name,
+        floor: row.floor,
+      }),
+    );
+  }
 }

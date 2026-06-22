@@ -26,6 +26,7 @@ const unitRepo: UnitRepository = {
           })
         : null,
     ),
+  findByBuilding: () => Promise.resolve([]),
 };
 
 function buildingRepoOwnedBy(ownerId: string): BuildingRepository {
