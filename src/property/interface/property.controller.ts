@@ -36,7 +36,8 @@ import { ErrorResponseDto } from '../../common/errors/error-response.dto';
 import { SWAGGER_BEARER_AUTH } from '../../common/swagger/swagger.constants';
 
 @ApiTags('property')
-// 모든 라우트가 JwtAuthGuard 로 보호되므로 클래스 레벨에 한 번만 선언한다.
+// 대부분의 라우트가 JwtAuthGuard로 보호되므로 클래스 레벨에 한 번만 선언한다.
+// 예외: GET invite-codes/:code/preview 는 미인증 공개 라우트(가드 없음).
 @ApiBearerAuth(SWAGGER_BEARER_AUTH)
 @Controller()
 export class PropertyController {
