@@ -1,7 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { INVITE_CODE_STORE, InviteCodeStore } from '../domain/invite-code.store';
+import {
+  INVITE_CODE_STORE,
+  InviteCodeStore,
+} from '../domain/invite-code.store';
 import { UNIT_REPOSITORY, UnitRepository } from '../domain/unit.repository';
-import { BUILDING_REPOSITORY, BuildingRepository } from '../domain/building.repository';
+import {
+  BUILDING_REPOSITORY,
+  BuildingRepository,
+} from '../domain/building.repository';
 
 export interface InvitePreview {
   valid: boolean;

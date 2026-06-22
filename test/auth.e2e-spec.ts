@@ -76,7 +76,12 @@ describe('Auth (e2e)', () => {
   it('role을 OWNER로 지정해 signup하면 role=OWNER', async () => {
     await request(app.getHttpServer() as App)
       .post('/auth/signup')
-      .send({ email: ownerEmail, name: '사장', password: 'pw123456', role: 'OWNER' })
+      .send({
+        email: ownerEmail,
+        name: '사장',
+        password: 'pw123456',
+        role: 'OWNER',
+      })
       .expect(201)
       .expect((res) =>
         expect((res.body as { role: string }).role).toBe('OWNER'),

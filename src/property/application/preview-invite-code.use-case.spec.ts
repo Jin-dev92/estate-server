@@ -8,8 +8,18 @@ import {
 import { UnitRepository } from '../domain/unit.repository';
 import { BuildingRepository } from '../domain/building.repository';
 
-const UNIT = Unit.reconstitute({ id: 'u1', buildingId: 'b1', name: '1503호', floor: 15 });
-const BUILDING = Building.reconstitute({ id: 'b1', ownerId: 'o1', name: '래미안 역삼', address: '서울 강남구' });
+const UNIT = Unit.reconstitute({
+  id: 'u1',
+  buildingId: 'b1',
+  name: '1503호',
+  floor: 15,
+});
+const BUILDING = Building.reconstitute({
+  id: 'b1',
+  ownerId: 'o1',
+  name: '래미안 역삼',
+  address: '서울 강남구',
+});
 
 function makeStore(payload: InviteCodePayload | null): InviteCodeStore {
   return {
@@ -18,8 +28,12 @@ function makeStore(payload: InviteCodePayload | null): InviteCodeStore {
     peek: () => Promise.resolve(payload),
   };
 }
-const units: Partial<UnitRepository> = { findById: () => Promise.resolve(UNIT) };
-const buildings: Partial<BuildingRepository> = { findById: () => Promise.resolve(BUILDING) };
+const units: Partial<UnitRepository> = {
+  findById: () => Promise.resolve(UNIT),
+};
+const buildings: Partial<BuildingRepository> = {
+  findById: () => Promise.resolve(BUILDING),
+};
 
 describe('PreviewInviteCodeUseCase', () => {
   it('유효한 코드면 valid=true와 건물/호실 이름을 반환', async () => {
@@ -29,7 +43,11 @@ describe('PreviewInviteCodeUseCase', () => {
       buildings as BuildingRepository,
     );
     const result = await useCase.execute('GOOD');
-    expect(result).toEqual({ valid: true, buildingName: '래미안 역삼', unitName: '1503호' });
+    expect(result).toEqual({
+      valid: true,
+      buildingName: '래미안 역삼',
+      unitName: '1503호',
+    });
   });
 
   it('만료·없는 코드면 valid=false (이름 없음)', async () => {

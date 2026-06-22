@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  MinLength,
+} from 'class-validator';
 import { Role } from '../../domain/role.enum';
 
 export class SignUpDto {
