@@ -126,6 +126,50 @@ describe('Property (e2e)', () => {
       .expect(403);
   });
 
+  it('발급된 초대코드는 미인증으로 미리보기되고 소비되지 않는다', async () => {
+    // 선행: 건물·호실 생성 후 code 발급
+    const building = await request(app.getHttpServer() as App)
+      .post('/buildings')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: '미리보기 테스트 건물', address: '서울시 종로구' })
+      .expect(201);
+    const buildingId = (building.body as { id: string }).id;
+
+    const unit = await request(app.getHttpServer() as App)
+      .post(`/buildings/${buildingId}/units`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: '202호', floor: 2 })
+      .expect(201);
+    const unitId = (unit.body as { id: string }).id;
+
+    const invite = await request(app.getHttpServer() as App)
+      .post(`/units/${unitId}/invite-codes`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(201);
+    const code = (invite.body as { code: string }).code;
+
+    // 미인증 미리보기: valid=true + 이름
+    const preview = await request(app.getHttpServer() as App)
+      .get(`/invite-codes/${code}/preview`)
+      .expect(200);
+    expect((preview.body as { valid: boolean }).valid).toBe(true);
+    expect((preview.body as { unitName?: string }).unitName).toBeDefined();
+
+    // 비소비 검증: 미리보기 후에도 실제 redeem(입주)이 성공해야 함
+    await request(app.getHttpServer() as App)
+      .post('/invite-codes/redeem')
+      .set('Authorization', `Bearer ${tenantToken}`)
+      .send({ code })
+      .expect(201);
+  });
+
+  it('잘못된 코드 미리보기는 valid=false', async () => {
+    const res = await request(app.getHttpServer() as App)
+      .get('/invite-codes/NOPE_INVALID/preview')
+      .expect(200);
+    expect((res.body as { valid: boolean }).valid).toBe(false);
+  });
+
   it('이미 사용된/없는 초대코드 redeem → 404 (단일 사용·만료 불구분)', async () => {
     await request(app.getHttpServer() as App)
       .post('/invite-codes/redeem')
