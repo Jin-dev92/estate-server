@@ -526,4 +526,4 @@ Expected: 모두 통과(경고 0).
 - 미리보기는 이름만 노출(주소·소유자 제외), rate limit 적용 (Task 4,5)
 
 ## 다음 플랜
-- FE 온보딩(estate-web): 세션 Route Handler(httpOnly 쿠키), API 클라이언트, 화면 5종 — 별도 플랜 `2026-06-22-onboarding-frontend.md`로 작성 예정.
+- FE 온보딩(estate-web): 세션 Route Handler(httpOnly 쿠키), API 클라이언트, 화면 5종 — 별도 플랜 `frontend/2026-06-22-onboarding-frontend.md`로 작성 예정.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** NestJS 11 · Jest(`*.spec.ts` 단위 + `test/*.e2e-spec.ts`).
 
-**근거:** FE-M1 대시보드 플랜 `2026-06-22-dashboard-home-frontend.md`의 "선행(선택)" 항목. 현재 응답은 `{id, unitId, status}`만이라 tenant가 호실을 식별 못 함.
+**근거:** FE-M1 대시보드 플랜 `frontend/2026-06-22-dashboard-home-frontend.md`의 "선행(선택)" 항목. 현재 응답은 `{id, unitId, status}`만이라 tenant가 호실을 식별 못 함.
 
 ## 비고(설계 판단)
 - 입주자의 Lease는 보통 1~2건이라 lease당 unit/building 조회(N+1)는 허용 범위. 대량이 되면 배치 조회로 최적화(후속). 지금은 단순·명확 우선.
