@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16(App Router, Server Components) · React 19 · TypeScript · Tailwind v4 · Vitest+RTL(프리미티브 단위 테스트).
 
-**근거:** 디자인 시스템 `docs/superpowers/specs/2026-06-22-design-system-design.md`, 페이지 인벤토리(온보딩 스펙 §3), API는 README §7. 온보딩 PR에서 만든 `lib/{constants,messages,session,api}.ts`·`components/ui/{button,field}.tsx`를 재사용/확장한다.
+**근거:** 디자인 시스템 `docs/superpowers/specs/frontend/2026-06-22-design-system-design.md`, 페이지 인벤토리(온보딩 스펙 §3), API는 README §7. 온보딩 PR에서 만든 `lib/{constants,messages,session,api}.ts`·`components/ui/{button,field}.tsx`를 재사용/확장한다.
 
 ## 스코프 (YAGNI)
 - **포함**: 역할별 1차 카드(TENANT=내 계약 / OWNER=내 건물), 알림 미읽음 배지 + 최근 소식 피드(`GET /notifications`), 채팅 요약(`GET /chat/rooms`), 빠른 액션 링크, 빈/에러 상태.

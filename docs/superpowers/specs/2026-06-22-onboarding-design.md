@@ -2,7 +2,7 @@
 
 > 작성일: 2026-06-22 · 상태: 설계 확정 (구현 미착수)
 > 영역: estate-server 프론트엔드 첫 번째 구현 영역 — 인증/회원가입/초대코드 입주.
-> 근거: 제품 스펙 [건물주 플랫폼 설계](./2026-06-11-building-owner-platform-design.md) · [디자인 시스템 v0](./2026-06-22-design-system-design.md) · 위키 `[[ui-ux-reference]]`.
+> 근거: 제품 스펙 [건물주 플랫폼 설계](./2026-06-11-building-owner-platform-design.md) · [디자인 시스템 v0](./frontend/2026-06-22-design-system-design.md) · 위키 `[[ui-ux-reference]]`.
 > 전제 스택: FE = Next.js(별도 레포 `estate-web`, estate-server에 git 서브모듈), Tailwind v4 + CSS 변수.
 
 ---
@@ -141,5 +141,5 @@ POST /auth/signup {email,name,password, role:"OWNER"}
 
 ## 참고
 - 제품 도메인/역할/초대 모델: `2026-06-11-building-owner-platform-design.md`
-- 디자인 토큰/컴포넌트: `2026-06-22-design-system-design.md`
+- 디자인 토큰/컴포넌트: `frontend/2026-06-22-design-system-design.md`
 - 모방 패턴: 위키 `notes/design/ui-ux-reference.md`
