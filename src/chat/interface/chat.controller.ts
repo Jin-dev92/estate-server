@@ -23,6 +23,7 @@ import { ListRoomsUseCase } from '../application/list-rooms.use-case';
 import { GetMessagesUseCase } from '../application/get-messages.use-case';
 import { RECENT_LIMIT } from '../infrastructure/redis-message-cache';
 import { EnsureRoomDto } from './dto/ensure-room.dto';
+import { RoomSummaryResponseDto } from './dto/room-summary-response.dto';
 
 @ApiTags('chat')
 @ApiBearerAuth(SWAGGER_BEARER_AUTH)
@@ -62,7 +63,11 @@ export class ChatController {
 
   @Get('rooms')
   @ApiOperation({ summary: '내 채팅방 목록(마지막 메시지·최근순)' })
-  @ApiResponse({ status: 200, description: '방 목록' })
+  @ApiResponse({
+    status: 200,
+    type: [RoomSummaryResponseDto],
+    description: '방 목록',
+  })
   async myRooms(@CurrentUser() user: TokenPayload) {
     const summaries = await this.listRooms.execute(user.sub);
     return summaries.map(({ room, lastMessage }) => ({

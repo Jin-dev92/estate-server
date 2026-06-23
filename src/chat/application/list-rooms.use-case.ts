@@ -27,11 +27,20 @@ export class ListRoomsUseCase {
   // 본인이 참가자(owner 또는 tenant)인 방 목록 + 마지막 메시지(최근순).
   async execute(userId: string): Promise<RoomSummary[]> {
     const rooms = await this.rooms.findByParticipant(userId);
+    // TODO(perf): 방 수에 비례해 Redis/DB를 N회 호출한다. 방이 늘면
+    // 단일 쿼리(서브쿼리/조인)로 마지막 메시지를 한 번에 가져오도록 최적화.
+    // (스펙 §3 후속 항목)
     const summaries = await Promise.all(
-      rooms.map(async (room) => ({
-        room,
-        lastMessage: room.id != null ? await this.lastMessage(room.id) : null,
-      })),
+      rooms.map(async (room) => {
+        // findByParticipant는 영속화된 방만 반환하므로 id는 항상 존재한다.
+        // null이면 리포지토리 계층의 버그 → 조용히 덮지 않고 즉시 드러낸다.
+        if (room.id == null) {
+          throw new Error(
+            `참가자 방 목록에 id 없는 방이 포함됨: buildingId=${room.buildingId}`,
+          );
+        }
+        return { room, lastMessage: await this.lastMessage(room.id) };
+      }),
     );
     // 마지막 메시지 시각 내림차순(없는 방은 뒤로).
     return summaries.sort((a, b) => {
