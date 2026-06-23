@@ -8,10 +8,21 @@ import { Message } from '../domain/message.entity';
 
 const OWNER = 'owner1';
 function room(id: string, tenantId: string) {
-  return ChatRoom.reconstitute({ id, buildingId: 'b1', ownerId: OWNER, tenantId });
+  return ChatRoom.reconstitute({
+    id,
+    buildingId: 'b1',
+    ownerId: OWNER,
+    tenantId,
+  });
 }
 function payload(roomId: string, createdAt: string): ChatMessagePayload {
-  return { roomId, messageId: `m-${roomId}`, senderId: OWNER, content: `c-${roomId}`, createdAt };
+  return {
+    roomId,
+    messageId: `m-${roomId}`,
+    senderId: OWNER,
+    content: `c-${roomId}`,
+    createdAt,
+  };
 }
 
 function build(opts: {
@@ -23,10 +34,12 @@ function build(opts: {
     findByParticipant: () => Promise.resolve(opts.rooms),
   };
   const cache: Partial<MessageCache> = {
-    getRecent: (roomId: string, _limit: number) => Promise.resolve(opts.cacheByRoom?.[roomId] ?? []),
+    getRecent: (roomId: string) =>
+      Promise.resolve(opts.cacheByRoom?.[roomId] ?? []),
   };
   const messages: Partial<MessageRepository> = {
-    findRecent: (roomId: string) => Promise.resolve(opts.dbByRoom?.[roomId] ?? []),
+    findRecent: (roomId: string) =>
+      Promise.resolve(opts.dbByRoom?.[roomId] ?? []),
   };
   return new ListRoomsUseCase(
     rooms as ChatRoomRepository,

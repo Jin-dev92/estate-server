@@ -42,7 +42,9 @@ export class ListRoomsUseCase {
   }
 
   // 캐시 우선, 비었으면 DB 폴백(get-messages와 동일 전략).
-  private async lastMessage(roomId: string): Promise<ChatMessagePayload | null> {
+  private async lastMessage(
+    roomId: string,
+  ): Promise<ChatMessagePayload | null> {
     const cached = await this.cache.getRecent(roomId, 1);
     if (cached.length > 0) return cached[0];
     const rows = await this.messages.findRecent(roomId, 1);
