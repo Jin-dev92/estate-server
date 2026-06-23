@@ -61,15 +61,18 @@ export class ChatController {
   }
 
   @Get('rooms')
-  @ApiOperation({ summary: '내 채팅방 목록' })
+  @ApiOperation({ summary: '내 채팅방 목록(마지막 메시지·최근순)' })
   @ApiResponse({ status: 200, description: '방 목록' })
   async myRooms(@CurrentUser() user: TokenPayload) {
-    const rooms = await this.listRooms.execute(user.sub);
-    return rooms.map((r) => ({
-      id: r.id,
-      buildingId: r.buildingId,
-      ownerId: r.ownerId,
-      tenantId: r.tenantId,
+    const summaries = await this.listRooms.execute(user.sub);
+    return summaries.map(({ room, lastMessage }) => ({
+      id: room.id,
+      buildingId: room.buildingId,
+      ownerId: room.ownerId,
+      tenantId: room.tenantId,
+      lastMessage: lastMessage
+        ? { content: lastMessage.content, createdAt: lastMessage.createdAt }
+        : null,
     }));
   }
 
