@@ -49,6 +49,7 @@ function deps(recipients: string[]) {
     },
     listForUser: () => Promise.resolve([]),
     markAllRead: () => Promise.resolve(),
+    markOneRead: () => Promise.resolve(false),
   };
   const incremented: string[] = [];
   const counter: NotificationCounter = {
@@ -58,6 +59,7 @@ function deps(recipients: string[]) {
     },
     get: () => Promise.resolve(0),
     reset: () => Promise.resolve(),
+    decrement: () => Promise.resolve(),
   };
   const pushed: NotificationPushPayload[] = [];
   const relay: NotificationRelay = {
@@ -91,6 +93,7 @@ describe('HandleEventUseCase', () => {
       saveIfNew: () => Promise.resolve(null),
       listForUser: () => Promise.resolve([]),
       markAllRead: () => Promise.resolve(),
+      markOneRead: () => Promise.resolve(false),
     };
     const useCase = new HandleEventUseCase(resolver, repo, counter, relay);
 
