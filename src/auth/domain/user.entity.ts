@@ -54,4 +54,9 @@ export class User {
     if (!name) throw new DomainError('이름은 필수입니다.');
     return new User({ ...this.props, name });
   }
+
+  // 불변: 비밀번호 해시만 바꾼 새 인스턴스를 반환한다.
+  changePassword(newHash: string): User {
+    return new User({ ...this.props, passwordHash: newHash });
+  }
 }

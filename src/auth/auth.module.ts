@@ -9,6 +9,7 @@ import { SignUpUseCase } from './application/sign-up.use-case';
 import { LoginUseCase } from './application/login.use-case';
 import { GetProfileUseCase } from './application/get-profile.use-case';
 import { UpdateProfileUseCase } from './application/update-profile.use-case';
+import { ChangePasswordUseCase } from './application/change-password.use-case';
 import { USER_REPOSITORY } from './domain/user.repository';
 import { PASSWORD_HASHER } from './domain/password-hasher';
 import { TOKEN_ISSUER } from './domain/token-issuer';
@@ -36,6 +37,7 @@ import { JwtTokenService } from './infrastructure/jwt-token.service';
     LoginUseCase,
     GetProfileUseCase,
     UpdateProfileUseCase,
+    ChangePasswordUseCase,
     JwtStrategy,
     { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
     { provide: PASSWORD_HASHER, useClass: BcryptPasswordHasher },

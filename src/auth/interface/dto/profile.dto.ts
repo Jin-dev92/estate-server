@@ -1,11 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, MinLength } from 'class-validator';
 import { Role } from '../../domain/role.enum';
 
 export class UpdateProfileDto {
   @ApiProperty({ example: '김철수' })
   @IsNotEmpty()
   name: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  currentPassword: string;
+
+  @ApiProperty({ minLength: 8 })
+  @MinLength(8)
+  newPassword: string;
 }
 
 export class ProfileResponseDto {
