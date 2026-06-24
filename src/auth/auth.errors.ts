@@ -22,4 +22,9 @@ export const AuthError = {
     status: HttpStatus.BAD_REQUEST,
     message: '허용되지 않은 역할입니다.',
   },
+  USER_NOT_FOUND: {
+    code: 'AUTH_USER_NOT_FOUND',
+    status: HttpStatus.NOT_FOUND,
+    message: '사용자를 찾을 수 없습니다.',
+  },
 } as const satisfies Record<string, AppErrorSpec>;

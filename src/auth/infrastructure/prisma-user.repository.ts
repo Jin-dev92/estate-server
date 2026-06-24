@@ -26,6 +26,34 @@ export class PrismaUserRepository implements UserRepository {
     });
   }
 
+  async findById(id: string): Promise<User | null> {
+    const row = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!row) return null;
+    return User.reconstitute({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      passwordHash: row.passwordHash,
+      role: row.role as Role,
+    });
+  }
+
+  async update(user: User): Promise<User> {
+    const row = await this.prisma.user.update({
+      where: { id: user.id! },
+      data: { name: user.name, passwordHash: user.passwordHash },
+    });
+    return User.reconstitute({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      passwordHash: row.passwordHash,
+      role: row.role as Role,
+    });
+  }
+
   async save(user: User): Promise<User> {
     try {
       const row = await this.prisma.user.create({

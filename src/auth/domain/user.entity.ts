@@ -48,4 +48,10 @@ export class User {
   get passwordHash(): string {
     return this.props.passwordHash;
   }
+
+  // 불변: 이름만 바꾼 새 인스턴스를 반환한다.
+  rename(name: string): User {
+    if (!name) throw new DomainError('이름은 필수입니다.');
+    return new User({ ...this.props, name });
+  }
 }
