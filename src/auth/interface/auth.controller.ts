@@ -77,6 +77,11 @@ export class AuthController {
   @ApiOperation({ summary: '프로필 조회(DB, name 포함)' })
   @ApiResponse({ status: 200, type: ProfileResponseDto })
   @ApiResponse({ status: 401, type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '사용자를 찾을 수 없음',
+  })
   async profile(
     @CurrentUser() user: TokenPayload,
   ): Promise<ProfileResponseDto> {
@@ -90,6 +95,11 @@ export class AuthController {
   @ApiOperation({ summary: '프로필(이름) 수정' })
   @ApiResponse({ status: 200, type: ProfileResponseDto })
   @ApiResponse({ status: 401, type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '사용자를 찾을 수 없음',
+  })
   async editProfile(
     @CurrentUser() user: TokenPayload,
     @Body() dto: UpdateProfileDto,
