@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
 import { PostCategory } from '../../domain/post-category.enum';
+import { Trim } from '../../../common/transform/trim.decorator';
 
 export class CreatePostDto {
   @ApiProperty({
@@ -14,6 +15,7 @@ export class CreatePostDto {
   category?: PostCategory;
 
   @ApiProperty({ example: '공지: 단수 안내' })
+  @Trim()
   @IsNotEmpty()
   title: string;
 
