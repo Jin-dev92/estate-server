@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty } from 'class-validator';
+import { Trim } from '../../../common/transform/trim.decorator';
 
 export class UpdatePostDto {
   @ApiProperty({ example: '공지: 단수 안내(수정)' })
+  @Trim()
   @IsNotEmpty()
   title: string;
 

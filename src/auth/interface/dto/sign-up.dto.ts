@@ -7,13 +7,16 @@ import {
   MinLength,
 } from 'class-validator';
 import { Role } from '../../domain/role.enum';
+import { Trim } from '../../../common/transform/trim.decorator';
 
 export class SignUpDto {
   @ApiProperty({ example: 'owner@estate.com' })
+  @Trim()
   @IsEmail()
   email: string;
 
   @ApiProperty({ example: '김철수' })
+  @Trim()
   @IsNotEmpty()
   name: string;
 
