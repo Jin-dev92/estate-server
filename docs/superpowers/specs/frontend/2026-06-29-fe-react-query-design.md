@@ -93,6 +93,7 @@ react-query는 두 가치를 각각 값이 나오는 곳에만 적용한다. 무
 - RHF 폼의 제출 상태 react-query화.
 - **zustand**(순수 클라 UI 전역상태가 생기면 별도 도입) · **Auth.js**(별도 스펙·고위험, 단독 진행) — 이번 범위에서 제외.
 - 알림 무한스크롤/페이지네이션, optimistic rollback 고도화(단건 읽음의 최소 낙관 갱신만).
+- **Suspense / `useSuspenseQuery`** 제외 — 알림 목록은 `initialData`로 시드돼 suspend가 발동하지 않고(에러는 Error Boundary로 던져져 오히려 보일러플레이트 증가), 라우트 로딩은 Next `loading.tsx`가 담당. 추후 서버 읽기를 클라 read로 이전(§9)할 때 재검토.
 
 ## 10. 알려진 제약 / 트레이드오프
 
