@@ -96,6 +96,11 @@ export class AuthController {
   @ApiOperation({ summary: '카카오 신규 가입 완료(역할 선택)' })
   @ApiResponse({ status: 201, description: 'accessToken 반환' })
   @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: '유효하지 않은 role',
+  })
+  @ApiResponse({
     status: 401,
     type: ErrorResponseDto,
     description: 'onboarding 토큰 무효/만료',
