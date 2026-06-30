@@ -1,9 +1,11 @@
-import { ConfigService } from '@nestjs/config';
-import { KakaoOAuthClient } from './kakao-oauth.client';
+import {ConfigService} from '@nestjs/config';
+import {KakaoOAuthClient} from './kakao-oauth.client';
+import {ConfigKey} from '../../config/config-keys';
 
 // ConfigService stub — client id/secret만 제공.
 const config = {
-  getOrThrow: (key: string) => (key === 'KAKAO_CLIENT_ID' ? 'cid' : 'csecret'),
+  getOrThrow: (key: ConfigKey) =>
+    key === ConfigKey.KakaoClientId ? 'cid' : 'csecret',
 } as unknown as ConfigService;
 
 function jsonRes(body: unknown, ok = true, status = 200): Response {
