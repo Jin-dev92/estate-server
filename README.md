@@ -215,7 +215,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | **M10** ✅ | Sentry 연동 — 에러 추적 + 성능 모니터링 | observability·트랜잭션/스팬·PII 스크러빙·외부 SaaS |
 | **M10.5** *(예정)* | 분산 트레이싱(HTTP→Kafka→워커) | 트레이스 컨텍스트 전파·Outbox 연계 |
 | **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 + Claude 자동 PR 리뷰 | GitHub Actions·서비스 컨테이너·migrate diff·claude-code-action |
-| **F1** *(추후)* | OAuth 소셜 로그인 | 외부 인증 연동 |
+| **F1** ✅ | OAuth 소셜 로그인(카카오) | 카카오 code 교환·Account 모델·우리 JWT 발급 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
 
 > M0~M7은 1차 범위이며 각 단계가 독립적으로 동작 검증되도록 끊었습니다. 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시킵니다.
@@ -241,6 +241,8 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 |---|---|---|
 | `POST /auth/signup` | 회원가입(기본 역할 TENANT; `role` 선택적 — OWNER·TENANT만 허용, ADMIN 불가) | 공개 |
 | `POST /auth/login` | 로그인, JWT `accessToken` 발급 | 공개 |
+| `POST /auth/kakao` | 카카오 로그인(code 교환) — 기존 유저 `{accessToken}`, 신규 `{onboardingToken}` | 공개 |
+| `POST /auth/kakao/complete` | 카카오 신규 가입 완료(역할 선택) → `{accessToken}` | 공개(onboarding 토큰 보유) |
 | `GET /auth/me` | 내 정보(id·email·role) 조회(토큰 기반, DB 미조회) | 인증 |
 | `GET /auth/profile` | 프로필(id·email·name·role) 조회(DB) | 인증(본인) |
 | `PATCH /auth/profile` | 프로필 이름 수정 | 인증(본인) |
