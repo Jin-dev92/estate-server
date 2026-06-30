@@ -87,6 +87,11 @@ export class AuthController {
     type: ErrorResponseDto,
     description: '이메일 동의 필요 등',
   })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Account는 있으나 연결된 User 없음',
+  })
   kakaoLoginHandler(@Body() dto: KakaoLoginDto) {
     return this.kakaoLogin.execute(dto);
   }
@@ -104,6 +109,11 @@ export class AuthController {
     status: 401,
     type: ErrorResponseDto,
     description: 'onboarding 토큰 무효/만료',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'Account는 있으나 연결된 User 없음',
   })
   @ApiResponse({
     status: 409,

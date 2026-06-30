@@ -12,14 +12,19 @@ interface UserProps {
 export class User {
   private constructor(private readonly props: UserProps) {}
 
+  // 생성 공통 필수값 검증(create·createOAuth 공유).
+  private static assertRequired(email: string, name: string): void {
+    if (!email) throw new DomainError('이메일은 필수입니다.');
+    if (!name) throw new DomainError('이름은 필수입니다.');
+  }
+
   static create(input: {
     email: string;
     name: string;
     passwordHash: string;
     role?: Role;
   }): User {
-    if (!input.email) throw new DomainError('이메일은 필수입니다.');
-    if (!input.name) throw new DomainError('이름은 필수입니다.');
+    User.assertRequired(input.email, input.name);
     return new User({
       id: null,
       email: input.email,
@@ -31,8 +36,7 @@ export class User {
 
   // OAuth 가입: 비밀번호 없이 생성(passwordHash=null).
   static createOAuth(input: { email: string; name: string; role: Role }): User {
-    if (!input.email) throw new DomainError('이메일은 필수입니다.');
-    if (!input.name) throw new DomainError('이름은 필수입니다.');
+    User.assertRequired(input.email, input.name);
     return new User({
       id: null,
       email: input.email,
