@@ -18,6 +18,9 @@ export class ChangePasswordUseCase {
   ): Promise<void> {
     const user = await this.users.findById(userId);
     if (!user) throw new AppException(AuthError.USER_NOT_FOUND);
+    // OAuth 가입 유저는 passwordHash가 null — 비밀번호 변경 불가.
+    if (!user.passwordHash)
+      throw new AppException(AuthError.INVALID_CREDENTIALS);
     const ok = await this.hasher.compare(currentPassword, user.passwordHash);
     if (!ok) throw new AppException(AuthError.INVALID_CREDENTIALS);
     const newHash = await this.hasher.hash(newPassword);

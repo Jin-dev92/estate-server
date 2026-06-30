@@ -19,7 +19,7 @@ function build(compareResult: boolean) {
   const users: Partial<UserRepository> = {
     findById: () => Promise.resolve(user()),
     update: (u) => {
-      updatedHashes.push(u.passwordHash);
+      updatedHashes.push(u.passwordHash ?? '');
       return Promise.resolve(u);
     },
   };

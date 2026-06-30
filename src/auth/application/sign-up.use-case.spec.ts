@@ -20,6 +20,9 @@ class FakeUserRepo implements UserRepository {
     this.users.push(saved);
     return Promise.resolve(saved);
   }
+  saveWithAccount(user: User): Promise<User> {
+    return this.save(user);
+  }
   findById(id: string): Promise<User | null> {
     return Promise.resolve(this.users.find((u) => u.id === id) ?? null);
   }

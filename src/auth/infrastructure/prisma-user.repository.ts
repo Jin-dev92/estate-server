@@ -94,4 +94,31 @@ export class PrismaUserRepository implements UserRepository {
       throw e;
     }
   }
+
+  async saveWithAccount(
+    user: User,
+    link: { provider: string; providerId: string },
+  ): Promise<User> {
+    // nested write: User와 Account를 Prisma가 단일 트랜잭션으로 생성한다.
+    // account 생성이 실패하면 user도 롤백되어 고아 레코드가 생기지 않는다.
+    // 예외(P2002 등)는 호출부(use-case)에서 EMAIL_IN_USE로 변환하도록 전파한다.
+    const row = await this.prisma.user.create({
+      data: {
+        email: user.email,
+        name: user.name,
+        passwordHash: user.passwordHash,
+        role: user.role,
+        accounts: {
+          create: { provider: link.provider, providerId: link.providerId },
+        },
+      },
+    });
+    return User.reconstitute({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      passwordHash: row.passwordHash,
+      role: row.role as Role,
+    });
+  }
 }

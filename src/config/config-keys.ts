@@ -19,6 +19,8 @@ export const enum ConfigKey {
   OutboxMaxAttempts = 'OUTBOX_MAX_ATTEMPTS',
   OutboxBackoffBaseMs = 'OUTBOX_BACKOFF_BASE_MS',
   OutboxBackoffCapMs = 'OUTBOX_BACKOFF_CAP_MS',
+  KakaoClientId = 'KAKAO_CLIENT_ID',
+  KakaoClientSecret = 'KAKAO_CLIENT_SECRET',
   SentryDsn = 'SENTRY_DSN',
   SentryEnvironment = 'SENTRY_ENVIRONMENT',
   SentryTracesSampleRate = 'SENTRY_TRACES_SAMPLE_RATE',

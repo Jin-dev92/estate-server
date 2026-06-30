@@ -5,7 +5,7 @@ interface UserProps {
   id: string | null;
   email: string;
   name: string;
-  passwordHash: string;
+  passwordHash: string | null;
   role: Role;
 }
 
@@ -29,6 +29,19 @@ export class User {
     });
   }
 
+  // OAuth 가입: 비밀번호 없이 생성(passwordHash=null).
+  static createOAuth(input: { email: string; name: string; role: Role }): User {
+    if (!input.email) throw new DomainError('이메일은 필수입니다.');
+    if (!input.name) throw new DomainError('이름은 필수입니다.');
+    return new User({
+      id: null,
+      email: input.email,
+      name: input.name,
+      passwordHash: null,
+      role: input.role,
+    });
+  }
+
   static reconstitute(props: UserProps): User {
     return new User(props);
   }
@@ -45,7 +58,7 @@ export class User {
   get role(): Role {
     return this.props.role;
   }
-  get passwordHash(): string {
+  get passwordHash(): string | null {
     return this.props.passwordHash;
   }
 

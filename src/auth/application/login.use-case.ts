@@ -21,6 +21,9 @@ export class LoginUseCase {
   async execute(input: LoginInput): Promise<{ accessToken: string }> {
     const user = await this.users.findByEmail(input.email);
     if (!user) throw new AppException(AuthError.INVALID_CREDENTIALS);
+    // OAuth 가입 유저는 passwordHash가 null — 비밀번호 로그인 불가.
+    if (!user.passwordHash)
+      throw new AppException(AuthError.INVALID_CREDENTIALS);
     const ok = await this.hasher.compare(input.password, user.passwordHash);
     if (!ok) throw new AppException(AuthError.INVALID_CREDENTIALS);
     const accessToken = await this.tokenIssuer.issue({

@@ -16,7 +16,7 @@ enum Role {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   name         String
   role         Role     @default(TENANT)
   createdAt    DateTime @default(now())
@@ -27,8 +27,21 @@ model User {
   leases    Lease[]
   posts     Post[]
   comments  Comment[]
+  accounts  Account[]
 
   @@index([deletedAt])
+}
+
+model Account {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  provider   String // AuthProvider 값("KAKAO")
+  providerId String // 소셜 회원번호
+  createdAt  DateTime @default(now())
+
+  @@unique([provider, providerId])
+  @@index([userId])
 }
 
 enum LeaseStatus {

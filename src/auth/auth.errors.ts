@@ -27,4 +27,14 @@ export const AuthError = {
     status: HttpStatus.NOT_FOUND,
     message: '사용자를 찾을 수 없습니다.',
   },
+  KAKAO_EMAIL_REQUIRED: {
+    code: 'AUTH_KAKAO_EMAIL_REQUIRED',
+    status: HttpStatus.BAD_REQUEST,
+    message: '카카오 이메일 제공 동의가 필요합니다.',
+  },
+  INVALID_ONBOARDING: {
+    code: 'AUTH_INVALID_ONBOARDING',
+    status: HttpStatus.UNAUTHORIZED,
+    message: '가입 세션이 만료되었어요. 다시 시도해주세요.',
+  },
 } as const satisfies Record<string, AppErrorSpec>;

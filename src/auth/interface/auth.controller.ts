@@ -10,8 +10,11 @@ import { LoginUseCase } from '../application/login.use-case';
 import { GetProfileUseCase } from '../application/get-profile.use-case';
 import { UpdateProfileUseCase } from '../application/update-profile.use-case';
 import { ChangePasswordUseCase } from '../application/change-password.use-case';
+import { KakaoLoginUseCase } from '../application/kakao-login.use-case';
+import { CompleteKakaoSignupUseCase } from '../application/complete-kakao-signup.use-case';
 import { SignUpDto } from './dto/sign-up.dto';
 import { LoginDto } from './dto/login.dto';
+import { KakaoLoginDto, CompleteKakaoDto } from './dto/kakao.dto';
 import {
   UpdateProfileDto,
   ProfileResponseDto,
@@ -33,6 +36,8 @@ export class AuthController {
     private readonly getProfile: GetProfileUseCase,
     private readonly updateProfile: UpdateProfileUseCase,
     private readonly changePassword: ChangePasswordUseCase,
+    private readonly kakaoLogin: KakaoLoginUseCase,
+    private readonly completeKakao: CompleteKakaoSignupUseCase,
   ) {}
 
   @Post('signup')
@@ -65,6 +70,48 @@ export class AuthController {
   })
   loginHandler(@Body() dto: LoginDto) {
     return this.login.execute(dto);
+  }
+
+  @Post('kakao')
+  @RateLimit({ ipMax: 10 })
+  @ApiOperation({
+    summary:
+      '카카오 로그인(code 교환) — 기존 유저는 accessToken, 신규는 onboardingToken',
+  })
+  @ApiResponse({
+    status: 201,
+    description: '{accessToken} 또는 {onboardingToken}',
+  })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: '이메일 동의 필요 등',
+  })
+  kakaoLoginHandler(@Body() dto: KakaoLoginDto) {
+    return this.kakaoLogin.execute(dto);
+  }
+
+  @Post('kakao/complete')
+  @RateLimit({ ipMax: 10 })
+  @ApiOperation({ summary: '카카오 신규 가입 완료(역할 선택)' })
+  @ApiResponse({ status: 201, description: 'accessToken 반환' })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: '유효하지 않은 role',
+  })
+  @ApiResponse({
+    status: 401,
+    type: ErrorResponseDto,
+    description: 'onboarding 토큰 무효/만료',
+  })
+  @ApiResponse({
+    status: 409,
+    type: ErrorResponseDto,
+    description: '이메일 중복',
+  })
+  completeKakaoHandler(@Body() dto: CompleteKakaoDto) {
+    return this.completeKakao.execute(dto);
   }
 
   @UseGuards(JwtAuthGuard)
