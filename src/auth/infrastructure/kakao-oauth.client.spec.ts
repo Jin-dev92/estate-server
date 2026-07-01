@@ -1,6 +1,6 @@
-import {ConfigService} from '@nestjs/config';
-import {KakaoOAuthClient} from './kakao-oauth.client';
-import {ConfigKey} from '../../config/config-keys';
+import { ConfigService } from '@nestjs/config';
+import { KakaoOAuthClient } from './kakao-oauth.client';
+import { ConfigKey } from '../../config/config-keys';
 
 // ConfigService stub — client id/secret만 제공.
 const config = {
