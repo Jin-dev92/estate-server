@@ -24,6 +24,11 @@ export class PrismaRecipientResolver implements RecipientResolver {
           event.payload as { buildingId: string },
           event.actorId,
         );
+      case EventType.LikeCreated:
+        return this.forComment(
+          event.payload as { postId: string },
+          event.actorId,
+        );
       default:
         return [];
     }

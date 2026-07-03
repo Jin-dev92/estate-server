@@ -40,6 +40,17 @@ export function buildContent(event: DomainEvent): NotificationContent | null {
         buildingId: p.buildingId,
       };
     }
+    case EventType.LikeCreated: {
+      const p = event.payload as { postId: string; buildingId: string | null };
+      return {
+        type: NotificationType.PostLiked,
+        title: '새 좋아요',
+        body: '회원님의 글에 좋아요가 눌렸습니다',
+        entityType: EntityType.Post,
+        entityId: p.postId,
+        buildingId: p.buildingId,
+      };
+    }
     case EventType.PostCreated: {
       const p = event.payload as { title: string; buildingId: string | null };
       return {

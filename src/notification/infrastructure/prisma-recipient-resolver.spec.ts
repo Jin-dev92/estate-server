@@ -88,6 +88,24 @@ describe('PrismaRecipientResolver', () => {
     expect(result.sort()).toEqual(['owner1', 'tenantB']);
   });
 
+  it('LikeCreated: 글 작성자에게, 단 본인 좋아요면 제외', async () => {
+    prisma.post.findFirst.mockResolvedValue({ authorId: 'author1' });
+    const base: DomainEvent = {
+      eventId: 'e1',
+      eventType: EventType.LikeCreated,
+      occurredAt: '2026-07-03T00:00:00.000Z',
+      actorId: 'liker1',
+      entityType: EntityType.Post,
+      entityId: 'p1',
+      payload: { postId: 'p1', buildingId: 'b1' },
+    };
+
+    await expect(resolver.resolve(base)).resolves.toEqual(['author1']);
+    await expect(
+      resolver.resolve({ ...base, actorId: 'author1' }),
+    ).resolves.toEqual([]);
+  });
+
   it('대상이 없으면 빈 배열', async () => {
     prisma.chatRoom.findUnique.mockResolvedValue(null);
     const event: DomainEvent = {

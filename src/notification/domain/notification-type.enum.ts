@@ -3,4 +3,5 @@ export const enum NotificationType {
   MessageReceived = 'MessageReceived',
   CommentAdded = 'CommentAdded',
   PostAdded = 'PostAdded',
+  PostLiked = 'PostLiked',
 }
