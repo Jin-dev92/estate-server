@@ -196,6 +196,9 @@ model OutboxEvent {
 }
 
 model PostLike {
+  // 게시글 소프트삭제(Post.deletedAt) 시 좋아요는 함께 소프트-캐스케이드하지 않는다.
+  // 소프트삭제된 글은 get/list에서 조회되지 않아 likeCount가 읽히지 않으므로 무해하며,
+  // 물리삭제 경로가 없어 FK(RESTRICT)도 문제되지 않는다(향후 글 복구/분석 시 이 전제를 유의).
   id        String   @id @default(cuid())
   postId    String
   post      Post     @relation(fields: [postId], references: [id])
