@@ -25,6 +25,17 @@ export interface PostDetail {
   comments: CommentView[];
 }
 
+// API 응답용 확장 타입. 좋아요 정보는 캐시에 넣지 않고 use-case가 라이브로 병합한다.
+export interface PostSummaryView extends PostSummary {
+  likeCount: number;
+  likedByMe: boolean;
+}
+
+export interface PostDetailView extends PostDetail {
+  likeCount: number;
+  likedByMe: boolean;
+}
+
 export interface BoardCache {
   getList(buildingId: string): Promise<PostSummary[] | null>;
   setList(buildingId: string, posts: PostSummary[]): Promise<void>;

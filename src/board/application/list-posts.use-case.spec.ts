@@ -4,12 +4,27 @@ import { PostCategory } from '../domain/post-category.enum';
 import { PostRepository } from '../domain/post.repository';
 import { BoardCache, PostSummary } from './board-cache';
 import { MembershipChecker } from './membership';
+import { PostLikeRepository } from '../domain/post-like.repository';
 
 const BUILDING_ID = 'b1';
 const USER_ID = 'u1';
 
 function membershipReturning(value: boolean): MembershipChecker {
   return { isMember: () => Promise.resolve(value) };
+}
+
+function likeRepoWith(opts: {
+  counts: Map<string, number>;
+  liked: Set<string>;
+}): PostLikeRepository {
+  return {
+    like: () => Promise.resolve(false),
+    unlike: () => Promise.resolve(false),
+    countByPost: () => Promise.resolve(0),
+    countByPosts: () => Promise.resolve(opts.counts),
+    likedPostIds: () => Promise.resolve(opts.liked),
+    hasLiked: () => Promise.resolve(false),
+  };
 }
 
 const samplePost = Post.reconstitute({
@@ -64,6 +79,7 @@ describe('ListPostsUseCase', () => {
       repo,
       cache,
       membershipReturning(true),
+      likeRepoWith({ counts: new Map([['p1', 4]]), liked: new Set(['p1']) }),
     );
 
     const result = await useCase.execute({
@@ -74,6 +90,8 @@ describe('ListPostsUseCase', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('p1');
     expect(cache.setListCalls).toBe(1);
+    expect(result[0].likeCount).toBe(4);
+    expect(result[0].likedByMe).toBe(true);
   });
 
   it('캐시 hit이면 repo를 건너뛰고 캐시 값을 반환한다', async () => {
@@ -87,6 +105,7 @@ describe('ListPostsUseCase', () => {
       repo,
       cache,
       membershipReturning(true),
+      likeRepoWith({ counts: new Map([['cached', 2]]), liked: new Set() }),
     );
 
     const result = await useCase.execute({
@@ -96,6 +115,8 @@ describe('ListPostsUseCase', () => {
 
     expect(result[0].id).toBe('cached');
     expect(findSpy).not.toHaveBeenCalled();
+    expect(result[0].likeCount).toBe(2);
+    expect(result[0].likedByMe).toBe(false);
   });
 
   it('멤버가 아니면 ForbiddenException', async () => {
@@ -103,6 +124,7 @@ describe('ListPostsUseCase', () => {
       repoWithPosts([]),
       new FakeCache(),
       membershipReturning(false),
+      likeRepoWith({ counts: new Map(), liked: new Set() }),
     );
 
     await expect(

@@ -4,7 +4,16 @@ import {
   COMMENT_REPOSITORY,
   CommentRepository,
 } from '../domain/comment.repository';
-import { BOARD_CACHE, BoardCache, PostDetail } from './board-cache';
+import {
+  POST_LIKE_REPOSITORY,
+  PostLikeRepository,
+} from '../domain/post-like.repository';
+import {
+  BOARD_CACHE,
+  BoardCache,
+  PostDetail,
+  PostDetailView,
+} from './board-cache';
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
 import { AppException } from '../../common/errors/app-exception';
 import { BoardError } from '../board.errors';
@@ -21,9 +30,20 @@ export class GetPostUseCase {
     @Inject(COMMENT_REPOSITORY) private readonly comments: CommentRepository,
     @Inject(BOARD_CACHE) private readonly cache: BoardCache,
     @Inject(MEMBERSHIP_CHECKER) private readonly membership: MembershipChecker,
+    @Inject(POST_LIKE_REPOSITORY) private readonly likes: PostLikeRepository,
   ) {}
 
-  async execute(input: GetPostInput): Promise<PostDetail> {
+  async execute(input: GetPostInput): Promise<PostDetailView> {
+    const detail = await this.loadDetail(input);
+
+    // 좋아요 정보는 캐시에 넣지 않고 매 조회 시 라이브로 병합(§6).
+    const likeCount = await this.likes.countByPost(input.postId);
+    const likedByMe = await this.likes.hasLiked(input.postId, input.userId);
+    return { ...detail, likeCount, likedByMe };
+  }
+
+  // 정적 본문(캐시된 또는 새로 구성한 PostDetail)을 반환. 인가 포함.
+  private async loadDetail(input: GetPostInput): Promise<PostDetail> {
     const cached = await this.cache.getDetail(input.postId);
     if (cached) {
       await this.authorize(input.userId, cached.buildingId);
