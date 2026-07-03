@@ -35,10 +35,10 @@ function postRepoWith(post: Post | null): PostRepository {
 }
 
 // like 전이 결과·count를 제어할 수 있는 fake 좋아요 저장소
-function likeRepoWith(opts: {
-  newlyLiked: boolean;
-  count: number;
-}): { likes: PostLikeRepository; getLastTx: () => TransactionClient | undefined } {
+function likeRepoWith(opts: { newlyLiked: boolean; count: number }): {
+  likes: PostLikeRepository;
+  getLastTx: () => TransactionClient | undefined;
+} {
   let lastTx: TransactionClient | undefined;
   const likes: PostLikeRepository = {
     like: (_p, _u, tx) => {

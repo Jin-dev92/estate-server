@@ -27,7 +27,9 @@ export class PrismaPostLikeRepository implements PostLikeRepository {
     tx?: TransactionClient,
   ): Promise<boolean> {
     const db = tx ?? this.prisma;
-    const { count } = await db.postLike.deleteMany({ where: { postId, userId } });
+    const { count } = await db.postLike.deleteMany({
+      where: { postId, userId },
+    });
     return count === 1;
   }
 
