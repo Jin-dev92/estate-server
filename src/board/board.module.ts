@@ -6,6 +6,8 @@ import { GetPostUseCase } from './application/get-post.use-case';
 import { UpdatePostUseCase } from './application/update-post.use-case';
 import { DeletePostUseCase } from './application/delete-post.use-case';
 import { CreateCommentUseCase } from './application/create-comment.use-case';
+import { LikePostUseCase } from './application/like-post.use-case';
+import { UnlikePostUseCase } from './application/unlike-post.use-case';
 import { POST_REPOSITORY } from './domain/post.repository';
 import { COMMENT_REPOSITORY } from './domain/comment.repository';
 import { POST_LIKE_REPOSITORY } from './domain/post-like.repository';
@@ -28,6 +30,8 @@ import { OutboxModule } from '../outbox/outbox.module';
     UpdatePostUseCase,
     DeletePostUseCase,
     CreateCommentUseCase,
+    LikePostUseCase,
+    UnlikePostUseCase,
     { provide: POST_REPOSITORY, useClass: PrismaPostRepository },
     { provide: COMMENT_REPOSITORY, useClass: PrismaCommentRepository },
     { provide: POST_LIKE_REPOSITORY, useClass: PrismaPostLikeRepository },

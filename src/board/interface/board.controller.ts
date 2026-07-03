@@ -25,6 +25,8 @@ import { GetPostUseCase } from '../application/get-post.use-case';
 import { UpdatePostUseCase } from '../application/update-post.use-case';
 import { DeletePostUseCase } from '../application/delete-post.use-case';
 import { CreateCommentUseCase } from '../application/create-comment.use-case';
+import { LikePostUseCase } from '../application/like-post.use-case';
+import { UnlikePostUseCase } from '../application/unlike-post.use-case';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -44,6 +46,8 @@ export class BoardController {
     private readonly updatePost: UpdatePostUseCase,
     private readonly deletePost: DeletePostUseCase,
     private readonly createComment: CreateCommentUseCase,
+    private readonly likePost: LikePostUseCase,
+    private readonly unlikePost: UnlikePostUseCase,
   ) {}
 
   @Post('buildings/:buildingId/posts')
@@ -187,5 +191,47 @@ export class BoardController {
       content: dto.content,
     });
     return { id: comment.id, postId: comment.postId, content: comment.content };
+  }
+
+  @Post('posts/:postId/likes')
+  @ApiParam({ name: 'postId', description: '좋아요할 게시글 ID' })
+  @ApiOperation({ summary: '게시글 좋아요(멱등, 건물 멤버 전용)' })
+  @ApiResponse({ status: 201, description: '좋아요 반영 후 상태' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: '건물 멤버 아님',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '게시글 없음',
+  })
+  likePostHandler(
+    @CurrentUser() user: TokenPayload,
+    @Param('postId') postId: string,
+  ) {
+    return this.likePost.execute({ userId: user.sub, postId });
+  }
+
+  @Delete('posts/:postId/likes')
+  @ApiParam({ name: 'postId', description: '좋아요를 취소할 게시글 ID' })
+  @ApiOperation({ summary: '게시글 좋아요 취소(멱등, 건물 멤버 전용)' })
+  @ApiResponse({ status: 200, description: '좋아요 취소 후 상태' })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: '건물 멤버 아님',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: '게시글 없음',
+  })
+  unlikePostHandler(
+    @CurrentUser() user: TokenPayload,
+    @Param('postId') postId: string,
+  ) {
+    return this.unlikePost.execute({ userId: user.sub, postId });
   }
 }
