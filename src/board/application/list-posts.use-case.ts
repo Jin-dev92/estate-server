@@ -35,9 +35,12 @@ export class ListPostsUseCase {
     const summaries = await this.loadSummaries(input.buildingId);
 
     // 좋아요 정보는 캐시 밖에서 배치로 병합(N+1 회피).
+    // counts와 liked는 서로 독립적이므로 병렬 조회로 라운드트립을 줄인다.
     const postIds = summaries.map((s) => s.id);
-    const counts = await this.likes.countByPosts(postIds);
-    const liked = await this.likes.likedPostIds(input.userId, postIds);
+    const [counts, liked] = await Promise.all([
+      this.likes.countByPosts(postIds),
+      this.likes.likedPostIds(input.userId, postIds),
+    ]);
     return summaries.map((s) => ({
       ...s,
       likeCount: counts.get(s.id) ?? 0,

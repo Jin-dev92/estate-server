@@ -37,8 +37,11 @@ export class GetPostUseCase {
     const detail = await this.loadDetail(input);
 
     // 좋아요 정보는 캐시에 넣지 않고 매 조회 시 라이브로 병합(§6).
-    const likeCount = await this.likes.countByPost(input.postId);
-    const likedByMe = await this.likes.hasLiked(input.postId, input.userId);
+    // count와 liked는 서로 독립적이므로 병렬 조회로 라운드트립을 줄인다.
+    const [likeCount, likedByMe] = await Promise.all([
+      this.likes.countByPost(input.postId),
+      this.likes.hasLiked(input.postId, input.userId),
+    ]);
     return { ...detail, likeCount, likedByMe };
   }
 
