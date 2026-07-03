@@ -81,6 +81,26 @@ describe('buildContent', () => {
     expect(c?.buildingId).toBeNull();
   });
 
+  it('LikeCreated → PostLiked, entityId는 postId', () => {
+    const c = buildContent(
+      event({
+        eventType: EventType.LikeCreated,
+        entityType: EntityType.Post,
+        entityId: 'p7',
+        payload: { postId: 'p7', buildingId: 'b7' },
+      }),
+    );
+
+    expect(c).toEqual({
+      type: NotificationType.PostLiked,
+      title: '새 좋아요',
+      body: '회원님의 글에 좋아요가 눌렸습니다',
+      entityType: EntityType.Post,
+      entityId: 'p7',
+      buildingId: 'b7',
+    });
+  });
+
   it('지원하지 않는 이벤트는 null', () => {
     expect(
       buildContent(event({ eventType: EventType.TenantJoined })),

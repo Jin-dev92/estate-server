@@ -266,11 +266,13 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | 메서드·경로 | 기능 | 인가 |
 |---|---|---|
 | `POST /buildings/:buildingId/posts` | 게시글 작성 | 건물 멤버 |
-| `GET /buildings/:buildingId/posts` | 게시글 목록(read-through 캐시) | 건물 멤버 |
-| `GET /posts/:postId` | 게시글 상세 + 댓글(캐시) | 건물 멤버 |
+| `GET /buildings/:buildingId/posts` | 게시글 목록(read-through 캐시, 응답에 `likeCount`·`likedByMe` 포함) | 건물 멤버 |
+| `GET /posts/:postId` | 게시글 상세 + 댓글(캐시, 응답에 `likeCount`·`likedByMe` 포함) | 건물 멤버 |
 | `PATCH /posts/:postId` | 게시글 수정 | 작성자 |
 | `DELETE /posts/:postId` | 게시글 삭제(204, 댓글 cascade) | 작성자 |
 | `POST /posts/:postId/comments` | 댓글 작성 | 건물 멤버 |
+| `POST /posts/:postId/likes` | 게시글 좋아요(멱등) | 건물 멤버 |
+| `DELETE /posts/:postId/likes` | 게시글 좋아요 취소(멱등) | 건물 멤버 |
 
 > **건물 멤버** = 건물주이거나 그 건물 호실에 ACTIVE 입주(Lease)가 있는 사용자.
 

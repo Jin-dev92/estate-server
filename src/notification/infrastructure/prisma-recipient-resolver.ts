@@ -15,13 +15,18 @@ export class PrismaRecipientResolver implements RecipientResolver {
       case EventType.MessageSent:
         return this.forMessage(event.payload as ChatMessagePayload);
       case EventType.CommentCreated:
-        return this.forComment(
+        return this.forPostAuthor(
           event.payload as { postId: string },
           event.actorId,
         );
       case EventType.PostCreated:
         return this.forPost(
           event.payload as { buildingId: string },
+          event.actorId,
+        );
+      case EventType.LikeCreated:
+        return this.forPostAuthor(
+          event.payload as { postId: string },
           event.actorId,
         );
       default:
@@ -41,8 +46,9 @@ export class PrismaRecipientResolver implements RecipientResolver {
     );
   }
 
-  // 글 작성자에게. 단 본인이 단 댓글이면 제외. 삭제된 글은 무시.
-  private async forComment(
+  // 글 작성자에게. 단 본인 행위(댓글·좋아요)면 제외. 삭제된 글은 무시.
+  // CommentCreated·LikeCreated가 공유(작성자 반환 + 행위자 제외 로직 동일).
+  private async forPostAuthor(
     payload: { postId: string },
     actorId: string | null,
   ): Promise<string[]> {

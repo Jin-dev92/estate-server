@@ -5,6 +5,7 @@ export const enum EventType {
   TenantJoined = 'TenantJoined',
   LeaseEnded = 'LeaseEnded',
   MessageSent = 'MessageSent',
+  LikeCreated = 'LikeCreated',
 }
 
 // 이벤트가 가리키는 엔티티 종류(AuditLog.entityType).
@@ -29,6 +30,7 @@ const TOPIC_BY_EVENT: Record<EventType, KafkaTopic> = {
   [EventType.TenantJoined]: KafkaTopic.MembershipEvents,
   [EventType.LeaseEnded]: KafkaTopic.MembershipEvents,
   [EventType.MessageSent]: KafkaTopic.ChatEvents,
+  [EventType.LikeCreated]: KafkaTopic.BoardEvents,
 };
 
 export function topicForEvent(eventType: EventType): KafkaTopic {

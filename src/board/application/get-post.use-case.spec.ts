@@ -6,6 +6,7 @@ import { CommentRepository } from '../domain/comment.repository';
 import { Comment } from '../domain/comment.entity';
 import { BoardCache, PostDetail } from './board-cache';
 import { MembershipChecker } from './membership';
+import { PostLikeRepository } from '../domain/post-like.repository';
 
 const POST_ID = 'p1';
 const BUILDING_ID = 'b1';
@@ -13,6 +14,20 @@ const USER_ID = 'u1';
 
 function membershipReturning(value: boolean): MembershipChecker {
   return { isMember: () => Promise.resolve(value) };
+}
+
+function likeRepoWith(opts: {
+  count: number;
+  liked: boolean;
+}): PostLikeRepository {
+  return {
+    like: () => Promise.resolve(false),
+    unlike: () => Promise.resolve(false),
+    countByPost: () => Promise.resolve(opts.count),
+    countByPosts: () => Promise.resolve(new Map()),
+    likedPostIds: () => Promise.resolve(new Set()),
+    hasLiked: () => Promise.resolve(opts.liked),
+  };
 }
 
 function postRepoWith(post: Post | null): PostRepository {
@@ -80,6 +95,7 @@ describe('GetPostUseCase', () => {
       commentRepo,
       cache,
       membershipReturning(true),
+      likeRepoWith({ count: 2, liked: true }),
     );
 
     const detail = await useCase.execute({ userId: USER_ID, postId: POST_ID });
@@ -87,6 +103,8 @@ describe('GetPostUseCase', () => {
     expect(detail.id).toBe(POST_ID);
     expect(detail.comments).toHaveLength(1);
     expect(cache.setDetailCalls).toBe(1);
+    expect(detail.likeCount).toBe(2);
+    expect(detail.likedByMe).toBe(true);
   });
 
   it('없는 글이면 NotFoundException', async () => {
@@ -95,6 +113,7 @@ describe('GetPostUseCase', () => {
       commentRepo,
       new FakeCache(),
       membershipReturning(true),
+      likeRepoWith({ count: 0, liked: false }),
     );
 
     await expect(
@@ -108,6 +127,7 @@ describe('GetPostUseCase', () => {
       commentRepo,
       new FakeCache(),
       membershipReturning(false),
+      likeRepoWith({ count: 0, liked: false }),
     );
 
     await expect(
@@ -131,10 +151,37 @@ describe('GetPostUseCase', () => {
       commentRepo,
       cache,
       membershipReturning(false),
+      likeRepoWith({ count: 0, liked: false }),
     );
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID }),
     ).rejects.toMatchObject({ code: 'BOARD_NOT_BUILDING_MEMBER' });
+  });
+
+  it('캐시 hit이어도 좋아요 정보(likeCount·likedByMe)를 라이브로 병합한다', async () => {
+    const cache = new FakeCache();
+    cache.detail = {
+      id: POST_ID,
+      buildingId: BUILDING_ID,
+      category: PostCategory.FREE,
+      title: '제목',
+      content: '본문',
+      authorId: USER_ID,
+      comments: [],
+    };
+    const useCase = new GetPostUseCase(
+      postRepoWith(samplePost),
+      commentRepo,
+      cache,
+      membershipReturning(true),
+      likeRepoWith({ count: 5, liked: false }),
+    );
+
+    const detail = await useCase.execute({ userId: USER_ID, postId: POST_ID });
+
+    expect(detail.likeCount).toBe(5);
+    expect(detail.likedByMe).toBe(false);
+    expect(cache.setDetailCalls).toBe(0); // 캐시 hit이라 재적재 없음
   });
 });
