@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { POST_REPOSITORY, PostRepository } from '../domain/post.repository';
 import {
@@ -14,6 +14,8 @@ import {
   TransactionRunner,
 } from '../../outbox/domain/transaction-runner';
 import { OUTBOX_STORE, OutboxStore } from '../../outbox/domain/outbox-store';
+import { LIKE_COUNTER, LikeCounter } from './like-counter';
+import { LikeCountReader } from './like-count-reader';
 
 export interface LikePostInput {
   userId: string;
@@ -28,12 +30,16 @@ export interface LikePostResult {
 
 @Injectable()
 export class LikePostUseCase {
+  private readonly logger = new Logger(LikePostUseCase.name);
+
   constructor(
     @Inject(POST_REPOSITORY) private readonly posts: PostRepository,
     @Inject(POST_LIKE_REPOSITORY) private readonly likes: PostLikeRepository,
     @Inject(MEMBERSHIP_CHECKER) private readonly membership: MembershipChecker,
     @Inject(TRANSACTION_RUNNER) private readonly txRunner: TransactionRunner,
     @Inject(OUTBOX_STORE) private readonly outbox: OutboxStore,
+    @Inject(LIKE_COUNTER) private readonly counter: LikeCounter,
+    private readonly reader: LikeCountReader,
   ) {}
 
   async execute(input: LikePostInput): Promise<LikePostResult> {
@@ -44,8 +50,9 @@ export class LikePostUseCase {
 
     // 좋아요 insert + outbox 적재를 한 트랜잭션으로. 신규 전이(newlyLiked)일 때만
     // 이벤트를 발행해 재클릭 스팸을 막는다(전이 판단은 DB rowCount 기반).
+    let newlyLiked = false;
     await this.txRunner.run(async (tx) => {
-      const newlyLiked = await this.likes.like(input.postId, input.userId, tx);
+      newlyLiked = await this.likes.like(input.postId, input.userId, tx);
       if (newlyLiked) {
         await this.outbox.add(
           {
@@ -62,8 +69,19 @@ export class LikePostUseCase {
       }
     });
 
-    // 라이브 COUNT — 커밋 후 최신 수치.
-    const likeCount = await this.likes.countByPost(input.postId);
+    // 카운터 갱신은 커밋 후(롤백 시 drift 방지) + best-effort(실패해도 TTL이 치유).
+    if (newlyLiked) {
+      try {
+        await this.counter.increment(input.postId);
+      } catch (err) {
+        this.logger.warn(
+          `좋아요 카운터 증가 실패(무시): ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // 카운터 우선 조회(미스면 COUNT 재구축) — 커밋 후 최신 수치.
+    const likeCount = await this.reader.readOne(input.postId);
     return { postId: input.postId, liked: true, likeCount };
   }
 }

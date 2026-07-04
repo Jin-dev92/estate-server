@@ -10,6 +10,8 @@ import {
 } from '../../outbox/domain/transaction-runner';
 import { OutboxStore } from '../../outbox/domain/outbox-store';
 import { EventType, EntityType } from '../../events/event-type.enum';
+import { LikeCounter } from './like-counter';
+import { LikeCountReader } from './like-count-reader';
 
 const POST_ID = 'p1';
 const BUILDING_ID = 'b1';
@@ -66,6 +68,29 @@ function outboxSpy(added: unknown[]): OutboxStore {
   };
 }
 
+// increment 호출 여부를 기록하는 카운터 스파이. fail=true면 항상 실패(best-effort 검증용).
+function counterSpy(opts: { fail?: boolean } = {}) {
+  const incremented: string[] = [];
+  const counter: LikeCounter = {
+    increment: (postId) => {
+      if (opts.fail) return Promise.reject(new Error('redis down'));
+      incremented.push(postId);
+      return Promise.resolve();
+    },
+    decrement: () => Promise.resolve(),
+    getMany: () => Promise.resolve(new Map()),
+    backfill: () => Promise.resolve(),
+  };
+  return { counter, incremented };
+}
+
+function readerReturning(count: number): LikeCountReader {
+  return {
+    readOne: () => Promise.resolve(count),
+    readMany: () => Promise.resolve(new Map()),
+  } as unknown as LikeCountReader;
+}
+
 const samplePost = Post.reconstitute({
   id: POST_ID,
   buildingId: BUILDING_ID,
@@ -86,6 +111,8 @@ describe('LikePostUseCase', () => {
       membershipReturning(true),
       txRunner,
       outboxSpy(added),
+      counterSpy().counter,
+      readerReturning(1),
     );
 
     const result = await useCase.execute({ userId: USER_ID, postId: POST_ID });
@@ -116,6 +143,8 @@ describe('LikePostUseCase', () => {
       membershipReturning(true),
       txRunner,
       outboxSpy(added),
+      counterSpy().counter,
+      readerReturning(1),
     );
 
     const result = await useCase.execute({ userId: USER_ID, postId: POST_ID });
@@ -133,6 +162,8 @@ describe('LikePostUseCase', () => {
       membershipReturning(true),
       txRunner,
       outboxSpy([]),
+      counterSpy().counter,
+      readerReturning(0),
     );
 
     await expect(
@@ -149,10 +180,69 @@ describe('LikePostUseCase', () => {
       membershipReturning(false),
       txRunner,
       outboxSpy([]),
+      counterSpy().counter,
+      readerReturning(0),
     );
 
     await expect(
       useCase.execute({ userId: USER_ID, postId: POST_ID }),
     ).rejects.toMatchObject({ code: 'BOARD_NOT_BUILDING_MEMBER' });
+  });
+
+  it('신규 좋아요면 커밋 후 카운터를 증가시킨다', async () => {
+    const { counter, incremented } = counterSpy();
+    const { likes } = likeRepoWith({ newlyLiked: true, count: 1 });
+
+    const useCase = new LikePostUseCase(
+      postRepoWith(samplePost),
+      likes,
+      membershipReturning(true),
+      txRunner,
+      outboxSpy([]),
+      counter,
+      readerReturning(1),
+    );
+
+    await useCase.execute({ userId: USER_ID, postId: POST_ID });
+
+    expect(incremented).toEqual([POST_ID]);
+  });
+
+  it('재클릭(전이 없음)이면 카운터를 건드리지 않는다', async () => {
+    const { counter, incremented } = counterSpy();
+    const { likes } = likeRepoWith({ newlyLiked: false, count: 1 });
+
+    const useCase = new LikePostUseCase(
+      postRepoWith(samplePost),
+      likes,
+      membershipReturning(true),
+      txRunner,
+      outboxSpy([]),
+      counter,
+      readerReturning(1),
+    );
+
+    await useCase.execute({ userId: USER_ID, postId: POST_ID });
+
+    expect(incremented).toEqual([]);
+  });
+
+  it('카운터 증가가 실패해도 요청은 성공한다(best-effort)', async () => {
+    const { counter } = counterSpy({ fail: true });
+    const { likes } = likeRepoWith({ newlyLiked: true, count: 1 });
+
+    const useCase = new LikePostUseCase(
+      postRepoWith(samplePost),
+      likes,
+      membershipReturning(true),
+      txRunner,
+      outboxSpy([]),
+      counter,
+      readerReturning(1),
+    );
+
+    await expect(
+      useCase.execute({ userId: USER_ID, postId: POST_ID }),
+    ).resolves.toEqual({ postId: POST_ID, liked: true, likeCount: 1 });
   });
 });
