@@ -17,6 +17,7 @@ import {
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
 import { AppException } from '../../common/errors/app-exception';
 import { BoardError } from '../board.errors';
+import { LikeCountReader } from './like-count-reader';
 
 export interface GetPostInput {
   userId: string;
@@ -31,15 +32,16 @@ export class GetPostUseCase {
     @Inject(BOARD_CACHE) private readonly cache: BoardCache,
     @Inject(MEMBERSHIP_CHECKER) private readonly membership: MembershipChecker,
     @Inject(POST_LIKE_REPOSITORY) private readonly likes: PostLikeRepository,
+    private readonly reader: LikeCountReader,
   ) {}
 
   async execute(input: GetPostInput): Promise<PostDetailView> {
     const detail = await this.loadDetail(input);
 
-    // 좋아요 정보는 캐시에 넣지 않고 매 조회 시 라이브로 병합(§6).
-    // count와 liked는 서로 독립적이므로 병렬 조회로 라운드트립을 줄인다.
+    // 좋아요 수는 카운터 우선(미스 시 COUNT 재구축), likedByMe는 유저별이라 DB.
+    // 서로 독립이므로 병렬 조회로 라운드트립을 줄인다.
     const [likeCount, likedByMe] = await Promise.all([
-      this.likes.countByPost(input.postId),
+      this.reader.readOne(input.postId),
       this.likes.hasLiked(input.postId, input.userId),
     ]);
     return { ...detail, likeCount, likedByMe };

@@ -13,6 +13,7 @@ import {
 import { MEMBERSHIP_CHECKER, MembershipChecker } from './membership';
 import { AppException } from '../../common/errors/app-exception';
 import { BoardError } from '../board.errors';
+import { LikeCountReader } from './like-count-reader';
 
 export interface ListPostsInput {
   userId: string;
@@ -26,6 +27,7 @@ export class ListPostsUseCase {
     @Inject(BOARD_CACHE) private readonly cache: BoardCache,
     @Inject(MEMBERSHIP_CHECKER) private readonly membership: MembershipChecker,
     @Inject(POST_LIKE_REPOSITORY) private readonly likes: PostLikeRepository,
+    private readonly reader: LikeCountReader,
   ) {}
 
   async execute(input: ListPostsInput): Promise<PostSummaryView[]> {
@@ -34,11 +36,10 @@ export class ListPostsUseCase {
 
     const summaries = await this.loadSummaries(input.buildingId);
 
-    // 좋아요 정보는 캐시 밖에서 배치로 병합(N+1 회피).
-    // counts와 liked는 서로 독립적이므로 병렬 조회로 라운드트립을 줄인다.
+    // 좋아요 수는 카운터 우선 배치(미스만 COUNT), likedByMe는 유저별이라 DB 배치.
     const postIds = summaries.map((s) => s.id);
     const [counts, liked] = await Promise.all([
-      this.likes.countByPosts(postIds),
+      this.reader.readMany(postIds),
       this.likes.likedPostIds(input.userId, postIds),
     ]);
     return summaries.map((s) => ({

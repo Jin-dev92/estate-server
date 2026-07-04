@@ -5,6 +5,7 @@ import { PostRepository } from '../domain/post.repository';
 import { BoardCache, PostSummary } from './board-cache';
 import { MembershipChecker } from './membership';
 import { PostLikeRepository } from '../domain/post-like.repository';
+import { LikeCountReader } from './like-count-reader';
 
 const BUILDING_ID = 'b1';
 const USER_ID = 'u1';
@@ -13,18 +14,23 @@ function membershipReturning(value: boolean): MembershipChecker {
   return { isMember: () => Promise.resolve(value) };
 }
 
-function likeRepoWith(opts: {
-  counts: Map<string, number>;
-  liked: Set<string>;
-}): PostLikeRepository {
+// counts는 이제 LikeCountReader가 담당 — 이 fake는 liked(likedPostIds)만 신경쓴다.
+function likeRepoWith(opts: { liked: Set<string> }): PostLikeRepository {
   return {
     like: () => Promise.resolve(false),
     unlike: () => Promise.resolve(false),
     countByPost: () => Promise.resolve(0),
-    countByPosts: () => Promise.resolve(opts.counts),
+    countByPosts: () => Promise.resolve(new Map()),
     likedPostIds: () => Promise.resolve(opts.liked),
     hasLiked: () => Promise.resolve(false),
   };
+}
+
+function readerWith(counts: Map<string, number>): LikeCountReader {
+  return {
+    readMany: () => Promise.resolve(counts),
+    readOne: () => Promise.resolve(0),
+  } as unknown as LikeCountReader;
 }
 
 const samplePost = Post.reconstitute({
@@ -79,7 +85,8 @@ describe('ListPostsUseCase', () => {
       repo,
       cache,
       membershipReturning(true),
-      likeRepoWith({ counts: new Map([['p1', 4]]), liked: new Set(['p1']) }),
+      likeRepoWith({ liked: new Set(['p1']) }),
+      readerWith(new Map([['p1', 4]])),
     );
 
     const result = await useCase.execute({
@@ -105,7 +112,8 @@ describe('ListPostsUseCase', () => {
       repo,
       cache,
       membershipReturning(true),
-      likeRepoWith({ counts: new Map([['cached', 2]]), liked: new Set() }),
+      likeRepoWith({ liked: new Set() }),
+      readerWith(new Map([['cached', 2]])),
     );
 
     const result = await useCase.execute({
@@ -124,7 +132,8 @@ describe('ListPostsUseCase', () => {
       repoWithPosts([]),
       new FakeCache(),
       membershipReturning(false),
-      likeRepoWith({ counts: new Map(), liked: new Set() }),
+      likeRepoWith({ liked: new Set() }),
+      readerWith(new Map()),
     );
 
     await expect(
