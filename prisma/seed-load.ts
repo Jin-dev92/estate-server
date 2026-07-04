@@ -8,7 +8,10 @@ const prisma = new PrismaClient();
 const LOAD_EMAIL = 'load-owner@example.com';
 const LOAD_PASSWORD = 'load-test-1234';
 const BUILDING_NAME = 'LoadTest Tower';
-const SEED_POST_COUNT = 5;
+
+// 부하 볼륨 파라미터(멱등: 이미 있으면 부족분만 채움).
+const SEED_POST_COUNT = Number(process.env.SEED_POST_COUNT ?? 5);
+const SEED_LIKES_PER_POST = Number(process.env.SEED_LIKES_PER_POST ?? 0);
 
 async function main(): Promise<void> {
   const passwordHash = await bcrypt.hash(LOAD_PASSWORD, 10);
@@ -49,6 +52,38 @@ async function main(): Promise<void> {
     });
   }
 
+  // 좋아요 시드: 유니크(postId,userId) 제약 때문에 liker 유저가 좋아요 수만큼 필요하다.
+  // 유저·좋아요 모두 createMany(skipDuplicates)로 멱등 — 볼륨을 늘려 재실행하면 부족분만 추가된다.
+  if (SEED_LIKES_PER_POST > 0) {
+    const likerEmails = Array.from(
+      { length: SEED_LIKES_PER_POST },
+      (_, i) => `load-liker-${i}@example.com`,
+    );
+    await prisma.user.createMany({
+      data: likerEmails.map((email, i) => ({
+        email,
+        name: `Load Liker ${i}`,
+        role: 'TENANT',
+      })),
+      skipDuplicates: true,
+    });
+    const likers = await prisma.user.findMany({
+      where: { email: { in: likerEmails } },
+      select: { id: true },
+    });
+    const posts = await prisma.post.findMany({
+      where: { buildingId: building.id },
+      select: { id: true },
+    });
+    // 글 단위 배치(글 50 × 2000이면 호출 50번 × 2000행) — 단일 초대형 INSERT 회피.
+    for (const post of posts) {
+      await prisma.postLike.createMany({
+        data: likers.map((u) => ({ postId: post.id, userId: u.id })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -56,6 +91,7 @@ async function main(): Promise<void> {
         password: LOAD_PASSWORD,
         buildingId: building.id,
         posts: Math.max(existing, SEED_POST_COUNT),
+        likesPerPost: SEED_LIKES_PER_POST,
       },
       null,
       2,
