@@ -49,6 +49,7 @@ open(arrival-rate) 모델이라 closed(VU)와 띄우는 법이 다르다. 로컬
 | 2026-06-16 | rate-limit (429 경계) | iter 20 | — | — | — | ipMax=10 → 429 관측 10회. 부하 하에서도 한도 정확 |
 | 2026-06-17 | stress-create (POST, 풀=1) | ramping 10→600 RPS, 40s 유지 | 1734 | 95.1 | 0.23% | throughput 상한 ~95 RPS, P2024 풀 타임아웃 35건(병목=DB 커넥션 풀), dropped 812 |
 | 2026-06-17 | spike-ratelimit (POST) | 5→300→5 RPS (window 10s, 한도 200) | 10.0 | — | 84.4%* | 429 차단 4032·통과 743·5xx 0(앱 생존), 윈도우 리셋 후 201 회복. *429 포함 실패율(정상 방어) |
+| 2026-07-04 | read-posts 좋아요 집계 (M11, before→after) | load 20VU, 글 50×좋아요 0/200/2000 | before 10.61/19.53/73.46 → after 12.20/12.39/13.27 | 15.8~16.0 | 0% | 라이브 COUNT → Redis 카운터 전환. 상세: [`load/results/m11-like-counter.md`](results/m11-like-counter.md) |
 
 ### 읽어둘 발견
 - **login은 데코레이터 rate limit 때문에 부하 측정이 막힌다.** `@RateLimit({ipMax:10})`은 라우트에 하드코딩이라 `RATE_LIMIT_*` env 상향으로 안 풀린다 → load에서 ~99% 429. **순수 bcrypt baseline은 smoke(윈도우당 ≤10회)로** 잰다. (이건 보안이 의도대로 동작한다는 증거이기도 하다.)
@@ -66,3 +67,7 @@ open(arrival-rate) 모델이라 closed(VU)와 띄우는 법이 다르다. 로컬
 - **막는 게 값싸다 → p95 10ms.** 429 거부는 Redis 고정윈도우 카운터 O(1) 체크라 거의 공짜. *진짜 일(글 INSERT)을 안 하므로* 급증해도 앱이 가볍다(방어의 핵심 이점).
 - **회복은 윈도우 리셋과 함께.** 고정 윈도우라 차단된 사용자도 **다음 윈도우(≤10s)면 다시 통과** → 스파이크 후 정상 글작성 201 확인. "회복이 즉시가 아니라 윈도우 경계"라는 점이 고정 윈도우의 성질.
 - **k6 실패율 84%는 '실패'가 아니다.** http_req_failed는 429를 실패로 세지만 여기선 *의도된 방어*다 → spike 시나리오에 실패율 threshold를 두지 않는 이유.
+
+### M11 발견 (좋아요 집계: 라이브 COUNT → Redis 카운터)
+- **before는 볼륨에 비례해 느려지고, after는 평평하다.** 글당 좋아요 0→2000에서 before(COUNT) p95는 10.61ms→73.46ms(약 6.9배)로 상승하지만, after(Redis 카운터, 워밍 상태) p95는 12.20ms→13.27ms(약 8.8%)로 사실상 변화가 없다. 자세한 before/after 표·결론은 [`load/results/m11-like-counter.md`](results/m11-like-counter.md) 참고.
+- **저볼륨에서는 카운터의 네트워크 왕복 비용이 오히려 드러난다.** 볼륨 0에서는 before(10.61ms)가 after(12.20ms)보다 낮다 — 좋아요가 거의 없을 땐 COUNT가 더 저렴할 수 있음을 보여준다. 교차점은 200~2000 사이이며, 이 실험 규모에서 이미 역전이 뚜렷하다.
