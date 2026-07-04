@@ -9,6 +9,40 @@
 
 ---
 
+## 한눈에 보기
+
+**이 프로젝트가 증명하는 것**
+
+- **이벤트 유실 없는 설계** — Transactional Outbox + DLQ(지수 백오프): 도메인 변경과 이벤트 적재를 한 트랜잭션으로 묶어 "DB엔 썼는데 이벤트는 유실" 창을 제거 (결정 13 · M9 견고화)
+- **진짜 팬아웃** — Kafka 컨슈머 워커 3종(persistence·notification·audit)을 독립 프로세스·독립 consumer group으로 분리해, 같은 이벤트를 서로 다른 관심사로 한 번씩 소비 (M5)
+- **측정 기반 접근** — k6 baseline/stress/spike로 병목(DB 커넥션 풀)을 숫자로 특정: 풀을 좁히자 p95 13.6ms → 1,734ms, throughput 천장 ~95 RPS (M7·M8)
+- **품질 게이트** — 단위테스트 225개 + CI 3중 게이트(경고 0 lint · Prisma 마이그레이션 drift 검사 · 자동 코드리뷰)
+
+```mermaid
+flowchart TB
+    C["클라이언트 (Next.js web/)"] -->|"HTTP · WebSocket"| MAIN["main 프로세스<br/>HTTP API · WS Gateway · Kafka producer<br/>(interface → application → domain → infrastructure)"]
+
+    MAIN -->|"도메인 변경 + Outbox 적재<br/>(단일 트랜잭션)"| PG[("PostgreSQL")]
+    MAIN <-->|"캐시 · rate limit(유저+IP) · pub/sub"| REDIS[("Redis")]
+    MAIN -->|"chat-events 직접 발행<br/>(after-commit)"| KAFKA{{"Kafka"}}
+
+    RELAY["outbox-relay 워커"] -->|"PENDING 폴링 · 지수 백오프 · DLQ 격리"| PG
+    RELAY -->|"board · membership-events 발행"| KAFKA
+
+    KAFKA -->|"consumer group ①"| PW["persistence-worker"]
+    KAFKA -->|"consumer group ②"| NW["notification-worker"]
+    KAFKA -->|"consumer group ③"| AW["audit-worker"]
+
+    PW -->|"Message 영속화"| PG
+    NW -->|"Notification 적재"| PG
+    NW -.->|"미읽음 카운터 · pub/sub → main WS 푸시"| REDIS
+    AW -->|"AuditLog 적재"| PG
+```
+
+**30초 요약** — 클라이언트 요청은 main 프로세스가 받고, 도메인 변경과 이벤트 적재(Outbox)를 **한 트랜잭션**으로 커밋합니다. outbox-relay가 이를 Kafka로 발행하면 세 워커가 **각자 독립 consumer group**으로 팬아웃 소비합니다. 채팅은 지연에 민감해 **실시간 전달(Redis pub/sub)과 영속화(Kafka 컨슈머)를 분리**했고, 워커(별도 프로세스)의 알림 푸시는 Redis 채널로 main의 WS Gateway에 브리지됩니다.
+
+---
+
 ## 1. 프로젝트 목적
 
 이 프로젝트의 1차 목표는 "완성된 제품"이 아니라 **세 가지 인프라 기술의 체득**입니다.
@@ -111,28 +145,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 
 ---
 
-## 4. 아키텍처 한눈에
-
-```
-       ┌─────────── main 프로세스 (HTTP API · WS Gateway · Kafka producer) ───────────┐
-   ──┤  interface → application → domain → infrastructure(Prisma·Redis·Kafka producer) │
-       └───────────────────────────────────┬──────────────────────────────────────────┘
-                                            │ 도메인 이벤트 발행
-                          ┌─────────────────┼─────────────────┐  (토픽: chat/board/membership-events)
-                          ▼                 ▼                 ▼
-              persistence-worker   notification-worker     audit-worker     ← 독립 프로세스·독립 consumer group
-              (chat-events)        (chat+board-events)     (전체 구독)
-                  │                     │  └─ Redis pub/sub → main WS 푸시      │
-                  ▼                     ▼                                      ▼
-               Message              Notification + 미읽음 카운터(Redis)      AuditLog
-```
-
-- **실시간 전달(Redis pub/sub)** 과 **영속화(Kafka 컨슈머)** 를 분리해, 사용자 체감 지연을 낮추면서 쓰기 스파이크를 비동기로 흡수합니다.
-- **M5에서 컨슈머를 워커별 프로세스로 분리**했습니다. main은 HTTP+WS+producer만 담당하고, persistence·notification·audit이 **각자 독립 consumer group**으로 같은 이벤트를 한 번씩 소비하는 **진짜 팬아웃**을 이룹니다. 워커(별도 프로세스)의 알림 푸시는 Redis 채널로 main의 WS Gateway에 브리지됩니다.
-
----
-
-## 5. 주요 설계 결정·트레이드오프
+## 4. 주요 설계 결정·트레이드오프
 
 이 프로젝트의 모든 설계는 "왜 그렇게 했는가"를 근거와 트레이드오프로 남겼습니다. 핵심 결정 13가지를 요약합니다. *(각 결정의 더 깊은 맥락과 대안 비교는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.)*
 
@@ -195,7 +208,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 
 ---
 
-## 6. 개발 마일스톤
+## 5. 개발 마일스톤
 
 | 단계 | 내용 | 학습 포커스 |
 |---|---|---|
@@ -229,7 +242,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 
 ---
 
-## 7. API 레퍼런스
+## 6. API 레퍼런스
 
 > API가 추가·변경되면 이 표와 PR 본문을 함께 갱신합니다(CLAUDE.md "API 문서화" 규칙). 모든 보호 엔드포인트는 `Authorization: Bearer <accessToken>` 헤더가 필요합니다.
 
@@ -287,7 +300,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | `GET /chat/rooms/:id/messages` | 메시지 히스토리(최신순, 캐시 우선·DB 폴백) | 방 참가자 |
 | WS `join` / `message` | 1:1 실시간 채팅(socket.io, 핸드셰이크 `auth.token` JWT) | 방 참가자 |
 
-> 메시지 전송은 Redis pub/sub로 즉시 중계되고, Kafka `chat-events`를 거쳐 persistence-worker가 비동기로 DB에 적재합니다(설계 §4 파이프라인).
+> 메시지 전송은 Redis pub/sub로 즉시 중계되고, Kafka `chat-events`를 거쳐 persistence-worker가 비동기로 DB에 적재합니다(상단 「한눈에 보기」 파이프라인).
 
 ### Notification (M5)
 
@@ -334,7 +347,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 
 ---
 
-## 8. 실행 방법
+## 7. 실행 방법
 
 ```bash
 # 0) 클론 — FE는 web/ 서브모듈이므로 함께 받기
@@ -378,9 +391,9 @@ $ pnpm load:read   # GET 목록 / load:create, load:login, load:ratelimit
 
 ---
 
-## 9. 더 보기
+## 8. 더 보기
 
-- 📄 **[전체 설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)** — 도메인 모델, 기능별 설계, Kafka 토픽/컨슈머, DDD 레이어 구조 등 **결정과 구조의 상세**가 정리되어 있습니다. (위 §5 설계 결정의 배경 문서)
+- 📄 **[전체 설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)** — 도메인 모델, 기능별 설계, Kafka 토픽/컨슈머, DDD 레이어 구조 등 **결정과 구조의 상세**가 정리되어 있습니다. (위 §4 설계 결정의 배경 문서)
 - 🗺️ **[M0 구현 계획](docs/superpowers/plans/2026-06-12-m0-foundation-auth.md)** — 전체 로드맵 + M0(인프라·Prisma·JWT 인증)의 TDD 단계별 계획.
 - 📒 **[마일스톤 학습 노트](docs/study/마일스톤-학습-노트.md)** — 마일스톤별 "왜 그렇게 했는가"·트레이드오프·스스로 점검.
 - 📖 **[용어집(Glossary)](docs/study/용어집.md)** — 마일스톤 전반에 등장한 용어를 카테고리별로 한눈에(DDD·Redis·Kafka·정합성·부하테스트 등).
