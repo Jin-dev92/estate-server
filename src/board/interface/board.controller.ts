@@ -62,6 +62,11 @@ export class BoardController {
     type: ErrorResponseDto,
     description: '건물 멤버 아님',
   })
+  @ApiResponse({
+    status: 429,
+    type: ErrorResponseDto,
+    description: '요청 한도 초과(user 20·IP 30/분)',
+  })
   async createPostHandler(
     @CurrentUser() user: TokenPayload,
     @Param('buildingId') buildingId: string,
@@ -183,6 +188,11 @@ export class BoardController {
     status: 404,
     type: ErrorResponseDto,
     description: '게시글 없음',
+  })
+  @ApiResponse({
+    status: 429,
+    type: ErrorResponseDto,
+    description: '요청 한도 초과(user 30·IP 60/분)',
   })
   async createCommentHandler(
     @CurrentUser() user: TokenPayload,
