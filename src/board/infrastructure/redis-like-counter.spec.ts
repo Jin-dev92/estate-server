@@ -31,32 +31,42 @@ describe('RedisLikeCounter', () => {
   });
 
   describe('increment / decrement', () => {
-    it('increment는 존재-시-증감 Lua를 (+1, TTL) 인자로 실행한다', async () => {
+    it('increment는 존재-시-증감 Lua를 (+1) 인자로 실행한다', async () => {
       await counter.increment(POST_ID);
 
       expect(redis.runScript).toHaveBeenCalledWith(
         expect.stringContaining('EXISTS'),
         [KEY],
-        [1, LIKE_COUNT_TTL_SEC],
+        [1],
       );
     });
 
-    it('decrement는 같은 Lua를 (-1, TTL) 인자로 실행한다', async () => {
+    it('decrement는 같은 Lua를 (-1) 인자로 실행한다', async () => {
       await counter.decrement(POST_ID);
 
       expect(redis.runScript).toHaveBeenCalledWith(
         expect.stringContaining('EXISTS'),
         [KEY],
-        [-1, LIKE_COUNT_TTL_SEC],
+        [-1],
       );
     });
 
-    it('증감 Lua는 음수 방지 하한(0) 보정을 포함한다', async () => {
-      // 서버측 Lua라 단위테스트에선 실행 대신 스크립트에 하한 가드가 있는지 확인한다.
+    it('증감은 TTL을 갱신하지 않는다(EXPIRE 없음 → drift 상한 보장)', async () => {
+      // TTL은 backfill만 소유한다. 증감 Lua에 EXPIRE가 있으면 활성 글이 무기한 warm되어
+      // best-effort 실패 시 drift가 무한 지속될 수 있으므로, 스크립트에 EXPIRE가 없어야 한다.
+      await counter.increment(POST_ID);
+
+      const [lua] = redis.runScript.mock.calls[0] as [string];
+      expect(lua).not.toContain('EXPIRE');
+    });
+
+    it('증감 Lua는 음수 방지 하한(0) 보정을 TTL 보존(KEEPTTL)으로 포함한다', async () => {
+      // 서버측 Lua라 단위테스트에선 실행 대신 스크립트 내용으로 검증한다.
       await counter.decrement(POST_ID);
 
       const [lua] = redis.runScript.mock.calls[0] as [string];
       expect(lua).toContain('v < 0');
+      expect(lua).toContain('KEEPTTL'); // SET이 TTL을 날려 상한 보장을 깨지 않도록
     });
   });
 
