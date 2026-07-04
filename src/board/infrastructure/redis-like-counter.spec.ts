@@ -50,6 +50,14 @@ describe('RedisLikeCounter', () => {
         [-1, LIKE_COUNT_TTL_SEC],
       );
     });
+
+    it('증감 Lua는 음수 방지 하한(0) 보정을 포함한다', async () => {
+      // 서버측 Lua라 단위테스트에선 실행 대신 스크립트에 하한 가드가 있는지 확인한다.
+      await counter.decrement(POST_ID);
+
+      const [lua] = redis.runScript.mock.calls[0] as [string];
+      expect(lua).toContain('v < 0');
+    });
   });
 
   describe('getMany', () => {
