@@ -32,6 +32,8 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { ErrorResponseDto } from '../../common/errors/error-response.dto';
 import { SWAGGER_BEARER_AUTH } from '../../common/swagger/swagger.constants';
+import { RateLimit } from '../../common/rate-limit/rate-limit.decorator';
+import { BOARD_RATE_LIMIT } from './board-rate-limit.constants';
 
 @ApiTags('board')
 // 모든 라우트가 JwtAuthGuard 로 보호되므로 클래스 레벨에 한 번만 선언한다.
@@ -51,6 +53,7 @@ export class BoardController {
   ) {}
 
   @Post('buildings/:buildingId/posts')
+  @RateLimit(BOARD_RATE_LIMIT.CREATE_POST)
   @ApiParam({ name: 'buildingId', description: '게시글을 작성할 건물 ID' })
   @ApiOperation({ summary: '게시글 작성(건물 멤버 전용)' })
   @ApiResponse({ status: 201, description: '생성된 게시글' })
@@ -167,6 +170,7 @@ export class BoardController {
   }
 
   @Post('posts/:postId/comments')
+  @RateLimit(BOARD_RATE_LIMIT.CREATE_COMMENT)
   @ApiParam({ name: 'postId', description: '댓글을 작성할 게시글 ID' })
   @ApiOperation({ summary: '댓글 작성(건물 멤버 전용)' })
   @ApiResponse({ status: 201, description: '생성된 댓글' })
