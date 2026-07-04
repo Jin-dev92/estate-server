@@ -13,10 +13,12 @@ import { COMMENT_REPOSITORY } from './domain/comment.repository';
 import { POST_LIKE_REPOSITORY } from './domain/post-like.repository';
 import { BOARD_CACHE } from './application/board-cache';
 import { MEMBERSHIP_CHECKER } from './application/membership';
+import { LIKE_COUNTER } from './application/like-counter';
 import { PrismaPostRepository } from './infrastructure/prisma-post.repository';
 import { PrismaCommentRepository } from './infrastructure/prisma-comment.repository';
 import { PrismaPostLikeRepository } from './infrastructure/prisma-post-like.repository';
 import { RedisBoardCache } from './infrastructure/redis-board-cache';
+import { RedisLikeCounter } from './infrastructure/redis-like-counter';
 import { PrismaMembershipChecker } from './infrastructure/prisma-membership.checker';
 import { OutboxModule } from '../outbox/outbox.module';
 
@@ -37,6 +39,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     { provide: POST_LIKE_REPOSITORY, useClass: PrismaPostLikeRepository },
     { provide: BOARD_CACHE, useClass: RedisBoardCache },
     { provide: MEMBERSHIP_CHECKER, useClass: PrismaMembershipChecker },
+    { provide: LIKE_COUNTER, useClass: RedisLikeCounter },
   ],
   exports: [MEMBERSHIP_CHECKER],
 })
