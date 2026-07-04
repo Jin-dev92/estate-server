@@ -7,6 +7,7 @@ import { Comment } from '../domain/comment.entity';
 import { BoardCache, PostDetail } from './board-cache';
 import { MembershipChecker } from './membership';
 import { PostLikeRepository } from '../domain/post-like.repository';
+import { LikeCountReader } from './like-count-reader';
 
 const POST_ID = 'p1';
 const BUILDING_ID = 'b1';
@@ -16,18 +17,23 @@ function membershipReturning(value: boolean): MembershipChecker {
   return { isMember: () => Promise.resolve(value) };
 }
 
-function likeRepoWith(opts: {
-  count: number;
-  liked: boolean;
-}): PostLikeRepository {
+// count는 이제 LikeCountReader가 담당 — 이 fake는 liked(hasLiked)만 신경쓴다.
+function likeRepoWith(opts: { liked: boolean }): PostLikeRepository {
   return {
     like: () => Promise.resolve(false),
     unlike: () => Promise.resolve(false),
-    countByPost: () => Promise.resolve(opts.count),
+    countByPost: () => Promise.resolve(0),
     countByPosts: () => Promise.resolve(new Map()),
     likedPostIds: () => Promise.resolve(new Set()),
     hasLiked: () => Promise.resolve(opts.liked),
   };
+}
+
+function readerReturning(count: number): LikeCountReader {
+  return {
+    readOne: () => Promise.resolve(count),
+    readMany: () => Promise.resolve(new Map()),
+  } as unknown as LikeCountReader;
 }
 
 function postRepoWith(post: Post | null): PostRepository {
@@ -95,7 +101,8 @@ describe('GetPostUseCase', () => {
       commentRepo,
       cache,
       membershipReturning(true),
-      likeRepoWith({ count: 2, liked: true }),
+      likeRepoWith({ liked: true }),
+      readerReturning(2),
     );
 
     const detail = await useCase.execute({ userId: USER_ID, postId: POST_ID });
@@ -113,7 +120,8 @@ describe('GetPostUseCase', () => {
       commentRepo,
       new FakeCache(),
       membershipReturning(true),
-      likeRepoWith({ count: 0, liked: false }),
+      likeRepoWith({ liked: false }),
+      readerReturning(0),
     );
 
     await expect(
@@ -127,7 +135,8 @@ describe('GetPostUseCase', () => {
       commentRepo,
       new FakeCache(),
       membershipReturning(false),
-      likeRepoWith({ count: 0, liked: false }),
+      likeRepoWith({ liked: false }),
+      readerReturning(0),
     );
 
     await expect(
@@ -151,7 +160,8 @@ describe('GetPostUseCase', () => {
       commentRepo,
       cache,
       membershipReturning(false),
-      likeRepoWith({ count: 0, liked: false }),
+      likeRepoWith({ liked: false }),
+      readerReturning(0),
     );
 
     await expect(
@@ -175,7 +185,8 @@ describe('GetPostUseCase', () => {
       commentRepo,
       cache,
       membershipReturning(true),
-      likeRepoWith({ count: 5, liked: false }),
+      likeRepoWith({ liked: false }),
+      readerReturning(5),
     );
 
     const detail = await useCase.execute({ userId: USER_ID, postId: POST_ID });
