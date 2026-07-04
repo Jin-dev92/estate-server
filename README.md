@@ -276,6 +276,8 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 
 > **건물 멤버** = 건물주이거나 그 건물 호실에 ACTIVE 입주(Lease)가 있는 사용자.
 
+> **Rate limit(M6):** 모든 쓰기 라우트는 전역 `RateLimitGuard`로 userId+IP 이중 제한(기본 user 60·IP 120/분)을 받는다. 스팸 표면이 큰 '생성' 라우트는 라우트별로 더 조인다 — `POST …/posts` = user 20·IP 30/분, `POST …/comments` = user 30·IP 60/분(`BOARD_RATE_LIMIT` 상수). 좋아요/취소는 멱등이고 연타를 허용해야 해 기본 한도를 그대로 쓴다. 수정/삭제는 대상 게시글이 이미 존재해야 하는 작업이라 생성 대비 스팸·남용 유인이 낮아 기본 한도로 충분하다. 초과 시 429(`RATE_LIMIT_EXCEEDED`) + `Retry-After`.
+
 ### Chat (M4)
 
 | 메서드·경로 | 기능 | 인가 |

@@ -151,6 +151,10 @@ function createMockUser(overrides?: Partial<User>): User {
 - 커밋 메시지
   - 기능에 대한 설명은 꼭 한글로 적는다.
   - 형식은 위 **"## 커밋 컨벤션"** 을 따른다: `[티켓명]{기능}: {한글 설명}` (예: `[M2.5]docs: 전역 에러 처리 스펙 작성`).
+- 브랜치 네이밍
+  - **harness가 자동 생성한 랜덤 코드네임 브랜치(예: `claude/determined-ramanujan-d34daa`)를 그대로 쓰지 않는다.** 브랜치명만 봐도 무슨 작업인지 알 수 있어야 리뷰·이력 추적이 쉽다.
+  - 티켓·기능 기반의 의미 있는 이름을 쓴다: `feature/{티켓}-{짧은-설명}` (예: `feature/M6-board-rate-limit`).
+  - worktree가 자동 코드네임으로 시작됐더라도 **push/PR 전에 의미 있는 이름으로 바꾼다.**
 
 ## Tool Execution Safety (TEMPORARY – Oct 2025)
 - Run tools **sequentially only**; do not issue a new `tool_use` until the previous tool's `tool_result` (or explicit cancellation) arrives.
