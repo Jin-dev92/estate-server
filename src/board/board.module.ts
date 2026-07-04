@@ -14,6 +14,7 @@ import { POST_LIKE_REPOSITORY } from './domain/post-like.repository';
 import { BOARD_CACHE } from './application/board-cache';
 import { MEMBERSHIP_CHECKER } from './application/membership';
 import { LIKE_COUNTER } from './application/like-counter';
+import { LikeCountReader } from './application/like-count-reader';
 import { PrismaPostRepository } from './infrastructure/prisma-post.repository';
 import { PrismaCommentRepository } from './infrastructure/prisma-comment.repository';
 import { PrismaPostLikeRepository } from './infrastructure/prisma-post-like.repository';
@@ -34,6 +35,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     CreateCommentUseCase,
     LikePostUseCase,
     UnlikePostUseCase,
+    LikeCountReader,
     { provide: POST_REPOSITORY, useClass: PrismaPostRepository },
     { provide: COMMENT_REPOSITORY, useClass: PrismaCommentRepository },
     { provide: POST_LIKE_REPOSITORY, useClass: PrismaPostLikeRepository },
