@@ -9,4 +9,5 @@ export interface OutboxRecord {
   partitionKey: string;
   payload: DomainEvent;
   attempts: number;
+  traceContext?: Record<string, string>; // 발행 시점 trace 전파 헤더(없으면 undefined)
 }
