@@ -15,6 +15,7 @@ import {
 import {
   continueTraceFromHeaders,
   kafkaTraceHeaders,
+  SPAN_OP_QUEUE_PROCESS,
 } from '../../common/tracing/trace-propagation';
 
 // persistence-worker: chat-events를 구독해 Message를 비동기 멱등 INSERT한다.
@@ -32,7 +33,7 @@ export class ChatPersistenceController {
   ): Promise<void> {
     await continueTraceFromHeaders(
       kafkaTraceHeaders(ctx),
-      { name: 'chat.persist', op: 'queue.process' },
+      { name: 'chat.persist', op: SPAN_OP_QUEUE_PROCESS },
       () => this.messages.persist(event.payload),
     );
   }

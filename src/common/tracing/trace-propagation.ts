@@ -5,6 +5,10 @@ import { KafkaContext } from '@nestjs/microservices';
 export const SENTRY_TRACE_HEADER = 'sentry-trace';
 export const BAGGAGE_HEADER = 'baggage';
 
+// span op(종류) — 여러 워커·relay가 공유하는 값이라 상수로 단일화(매직 스트링 방지).
+export const SPAN_OP_QUEUE_PROCESS = 'queue.process'; // 큐 메시지 소비(워커)
+export const SPAN_OP_QUEUE_PUBLISH = 'queue.publish'; // 큐 메시지 발행(relay)
+
 export interface SpanOptions {
   name: string; // span 표시 이름(예: 'outbox.publish')
   op: string; // span 종류(예: 'queue.publish')
@@ -28,6 +32,11 @@ export function captureTraceHeaders(): Record<string, string> {
 
 // 헤더에서 trace를 복원(extract)해 fn을 그 trace의 자식 span으로 실행한다.
 // 헤더 없음/실패 시 fn을 그대로 실행(새 trace로 폴백). 비침습.
+//
+// 제약: fn은 반드시 async(Promise 반환)여야 한다. catch 폴백은 "Sentry 셋업이
+// 동기적으로 던진" 경우만 fn을 재시도하도록 의도된 것으로, async fn의 업무 실패는
+// rejected Promise로 전파돼 이 동기 catch에 걸리지 않는다. 만약 동기 fn을 넘기면
+// 업무 예외가 catch에 걸려 fn이 2회 실행(발행·기록 중복)될 수 있다.
 export function continueTraceFromHeaders<T>(
   headers: Record<string, string | undefined>,
   span: SpanOptions,

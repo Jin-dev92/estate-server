@@ -7,7 +7,10 @@ import {
   TransactionRunner,
 } from '../domain/transaction-runner';
 import { OUTBOX_BATCH_SIZE } from './outbox.tokens';
-import { continueTraceFromHeaders } from '../../common/tracing/trace-propagation';
+import {
+  continueTraceFromHeaders,
+  SPAN_OP_QUEUE_PUBLISH,
+} from '../../common/tracing/trace-propagation';
 
 // 폴링 1틱: 한 트랜잭션 안에서 PENDING을 잠그고(SKIP LOCKED) emit → 마킹.
 // 트랜잭션으로 감싸야 잠금이 유지돼 멀티 relay가 같은 행을 중복 발행하지 않는다.
@@ -29,7 +32,7 @@ export class RelayOutboxUseCase {
         try {
           await continueTraceFromHeaders(
             row.traceContext ?? {},
-            { name: 'outbox.publish', op: 'queue.publish' },
+            { name: 'outbox.publish', op: SPAN_OP_QUEUE_PUBLISH },
             () => this.publisher.publishOrThrow(row.payload),
           );
           await this.outbox.markPublished(row.id, tx);

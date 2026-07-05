@@ -1,8 +1,22 @@
 import {
   captureTraceHeaders,
   continueTraceFromHeaders,
+  kafkaTraceHeaders,
   SENTRY_TRACE_HEADER,
+  BAGGAGE_HEADER,
 } from './trace-propagation';
+import { KafkaContext } from '@nestjs/microservices';
+
+// 실제 Kafka 헤더는 Buffer 값으로 온다. getMessage().headers를 흉내내는 팩토리.
+function fakeCtxWithHeaders(
+  headers: Record<string, Buffer> | (() => never),
+): KafkaContext {
+  const getMessage =
+    typeof headers === 'function'
+      ? headers // 던지는 경우(catch 폴백 검증용)
+      : () => ({ headers });
+  return { getMessage } as unknown as KafkaContext;
+}
 
 describe('trace-propagation', () => {
   describe('captureTraceHeaders', () => {
@@ -40,6 +54,42 @@ describe('trace-propagation', () => {
       );
 
       await expect(result).resolves.toBe('async-ok');
+    });
+  });
+
+  describe('kafkaTraceHeaders', () => {
+    it('Buffer 헤더 값을 문자열로 추출한다', () => {
+      const ctx = fakeCtxWithHeaders({
+        [SENTRY_TRACE_HEADER]: Buffer.from('abc-123-1'),
+        [BAGGAGE_HEADER]: Buffer.from('env=prod'),
+      });
+
+      const headers = kafkaTraceHeaders(ctx);
+
+      expect(headers).toEqual({
+        [SENTRY_TRACE_HEADER]: 'abc-123-1',
+        [BAGGAGE_HEADER]: 'env=prod',
+      });
+    });
+
+    it('없는 전파 헤더 키는 결과에서 제외한다', () => {
+      const ctx = fakeCtxWithHeaders({
+        [SENTRY_TRACE_HEADER]: Buffer.from('abc-123-1'),
+      });
+
+      const headers = kafkaTraceHeaders(ctx);
+
+      expect(headers).toEqual({ [SENTRY_TRACE_HEADER]: 'abc-123-1' });
+    });
+
+    it('getMessage가 던지면 빈 맵으로 폴백한다', () => {
+      const ctx = fakeCtxWithHeaders(() => {
+        throw new Error('no message');
+      });
+
+      const headers = kafkaTraceHeaders(ctx);
+
+      expect(headers).toEqual({});
     });
   });
 });

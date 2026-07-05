@@ -11,7 +11,15 @@ import { HandleEventUseCase } from '../application/handle-event.use-case';
 import {
   continueTraceFromHeaders,
   kafkaTraceHeaders,
+  SPAN_OP_QUEUE_PROCESS,
+  SpanOptions,
 } from '../../common/tracing/trace-propagation';
+
+// 두 핸들러가 공유하는 span 정의(반복 리터럴 단일화).
+const NOTIFICATION_SPAN: SpanOptions = {
+  name: 'notification.handle',
+  op: SPAN_OP_QUEUE_PROCESS,
+};
 
 // notification-worker: chat-events·board-events를 독립 그룹으로 구독해 알림을 생성한다.
 @Controller()
@@ -25,7 +33,7 @@ export class NotificationWorkerController {
   ): Promise<void> {
     await continueTraceFromHeaders(
       kafkaTraceHeaders(ctx),
-      { name: 'notification.handle', op: 'queue.process' },
+      NOTIFICATION_SPAN,
       () => this.handle.execute(event),
     );
   }
@@ -37,7 +45,7 @@ export class NotificationWorkerController {
   ): Promise<void> {
     await continueTraceFromHeaders(
       kafkaTraceHeaders(ctx),
-      { name: 'notification.handle', op: 'queue.process' },
+      NOTIFICATION_SPAN,
       () => this.handle.execute(event),
     );
   }
