@@ -17,6 +17,30 @@ NestJS 기반 백엔드 서버.
 
 ---
 
+<!-- from rules/stacks/redis (llm-wiki), 2026-07-05 반입 -->
+## Redis 캐시 규칙
+
+> 현재 `RedisService`는 standalone 인스턴스로 연결된다(`Redis.Cluster` 아님) — CROSSSLOT 에러는 지금 발생하지 않는다. 아래 해시태그 규칙은 지금 당장 필요하진 않지만, 나중에 Cluster로 전환해도 키 재설계 없이 넘어가기 위한 선제 대비용으로 남겨둔다.
+
+### 멀티키 연산 키 네이밍 (Cluster 전환 대비)
+
+같은 엔티티에 속한 키들은 해시태그(`{}`)로 묶어 짓는다. Standalone에서는 효과가 없지만 무해하며, Cluster 전환 시 그대로 CROSSSLOT 안전성을 확보한다.
+
+```ts
+redis.mget('{user:100}:profile', '{user:100}:cart')
+```
+
+### TTL 필수 + 캐시 무효화
+
+- `SET`/`HSET` 등 캐시 쓰기에는 항상 명시적 TTL을 포함한다(예: `'EX', 3600`). TTL 없는 캐시 쓰기 금지.
+- Prisma Mutation(Create/Update/Delete) 시, 관련 캐시 키를 함께 `DEL`(무효화)한다.
+
+### 연결 관리
+
+개별 서비스에서 Redis 클라이언트를 직접 `connect()`/`disconnect()`하지 않는다. DI로 주입되는 단일 `RedisService`(전역 `RedisModule`)를 통해서만 접근한다.
+
+---
+
 ## 커밋 컨벤션
 
 커밋 메시지(제목 줄)는 다음 형식을 따른다:
