@@ -13,9 +13,23 @@ import { EventType, EntityType } from '../../events/event-type.enum';
 
 jest.mock('@sentry/nestjs');
 
+// 자동 mock은 continueTrace/startSpan도 jest.fn()(콜백 미실행)으로 만들어버려
+// continueTraceFromHeaders로 감싼 publishOrThrow가 실행되지 않는 부작용이 생긴다.
+// captureException(격리 시 호출 검증 대상)은 자동 mock 그대로 두고,
+// continueTrace/startSpan만 실제처럼 콜백을 실행하도록 구현을 준다.
+(Sentry.continueTrace as jest.Mock).mockImplementation(
+  (_ctx, fn: () => unknown) => fn(),
+);
+(Sentry.startSpan as jest.Mock).mockImplementation((_span, fn: () => unknown) =>
+  fn(),
+);
+
 const TX = {} as TransactionClient;
 
-function record(id: string): OutboxRecord {
+function record(
+  id: string,
+  traceContext?: Record<string, string>,
+): OutboxRecord {
   const payload: DomainEvent = {
     eventId: `evt-${id}`,
     eventType: EventType.PostCreated,
@@ -33,6 +47,7 @@ function record(id: string): OutboxRecord {
     partitionKey: 'p1',
     payload,
     attempts: 0,
+    traceContext,
   };
 }
 
@@ -147,5 +162,27 @@ describe('RelayOutboxUseCase', () => {
 
     expect(published).toEqual([]);
     expect(failed).toEqual([]);
+  });
+
+  it('traceContext 유무와 무관하게 각 행을 발행한다', async () => {
+    // fetchPending fake가 traceContext 있는 행 1(evt-with) + 없는 행 1(evt-without)을 반환.
+    const rows = [record('with', { 'sentry-trace': 'x' }), record('without')];
+    const { runner, store, published } = deps(rows);
+    const publishedPayloads: DomainEvent[] = [];
+    const publisher: EventPublisher = {
+      publish: () => Promise.resolve(),
+      publishOrThrow: (e) => {
+        publishedPayloads.push(e);
+        return Promise.resolve();
+      },
+    };
+    const useCase = new RelayOutboxUseCase(runner, store, publisher, BATCH);
+
+    await useCase.execute();
+
+    // continueTraceFromHeaders로 감싸도 publishOrThrow가 두 행 모두에 대해 호출되고
+    // markPublished가 뒤따른다(회귀 없음).
+    expect(publishedPayloads).toHaveLength(2);
+    expect(published).toEqual(['with', 'without']);
   });
 });

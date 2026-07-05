@@ -7,6 +7,7 @@ import {
   TransactionRunner,
 } from '../domain/transaction-runner';
 import { OUTBOX_BATCH_SIZE } from './outbox.tokens';
+import { continueTraceFromHeaders } from '../../common/tracing/trace-propagation';
 
 // 폴링 1틱: 한 트랜잭션 안에서 PENDING을 잠그고(SKIP LOCKED) emit → 마킹.
 // 트랜잭션으로 감싸야 잠금이 유지돼 멀티 relay가 같은 행을 중복 발행하지 않는다.
@@ -26,7 +27,11 @@ export class RelayOutboxUseCase {
       const rows = await this.outbox.fetchPending(this.batchSize, tx);
       for (const row of rows) {
         try {
-          await this.publisher.publishOrThrow(row.payload);
+          await continueTraceFromHeaders(
+            row.traceContext ?? {},
+            { name: 'outbox.publish', op: 'queue.publish' },
+            () => this.publisher.publishOrThrow(row.payload),
+          );
           await this.outbox.markPublished(row.id, tx);
         } catch (err) {
           // emit 실패: store가 백오프 재스케줄 vs FAILED 격리를 결정한다.
