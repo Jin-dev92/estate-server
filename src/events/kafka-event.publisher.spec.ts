@@ -38,10 +38,17 @@ describe('KafkaEventPublisher', () => {
       eventOf({ eventType: EventType.PostCreated, entityId: 'post1' }),
     );
 
-    expect(client.emit).toHaveBeenCalledWith(KafkaTopic.BoardEvents, {
-      key: 'post1',
-      value: eventOf({ eventType: EventType.PostCreated, entityId: 'post1' }),
-    });
+    expect(client.emit).toHaveBeenCalledWith(
+      KafkaTopic.BoardEvents,
+      expect.objectContaining({
+        key: 'post1',
+        value: eventOf({
+          eventType: EventType.PostCreated,
+          entityId: 'post1',
+        }),
+        headers: expect.any(Object) as object,
+      }),
+    );
   });
 
   it('TenantJoined/LeaseEnded는 membership-events 토픽에 발행한다', async () => {
@@ -53,14 +60,18 @@ describe('KafkaEventPublisher', () => {
       }),
     );
 
-    expect(client.emit).toHaveBeenCalledWith(KafkaTopic.MembershipEvents, {
-      key: 'lease1',
-      value: eventOf({
-        eventType: EventType.LeaseEnded,
-        entityType: EntityType.Lease,
-        entityId: 'lease1',
+    expect(client.emit).toHaveBeenCalledWith(
+      KafkaTopic.MembershipEvents,
+      expect.objectContaining({
+        key: 'lease1',
+        value: eventOf({
+          eventType: EventType.LeaseEnded,
+          entityType: EntityType.Lease,
+          entityId: 'lease1',
+        }),
+        headers: expect.any(Object) as object,
       }),
-    });
+    );
   });
 
   it('발행이 실패해도 throw하지 않는다(after-commit 한계, 로깅만)', async () => {
@@ -90,5 +101,21 @@ describe('KafkaEventPublisher', () => {
         'broker down',
       );
     });
+  });
+
+  it('emit 메시지에 trace 전파용 headers를 포함한다', async () => {
+    // Sentry 미초기화라 headers는 {} 지만, 메시지에 headers 키 자체가 실려야 한다.
+    const sampleEvent = eventOf();
+
+    await publisher.publishOrThrow(sampleEvent);
+
+    expect(client.emit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        key: sampleEvent.entityId,
+        value: sampleEvent,
+        headers: expect.any(Object) as object,
+      }),
+    );
   });
 });
