@@ -36,8 +36,28 @@ describe('PrismaOutboxStore', () => {
         partitionKey: 'p1',
         payload: event,
         status: OutboxStatus.Pending,
+        // Sentry 미초기화 환경(테스트)에서 captureTraceHeaders()는 빈 객체를 반환한다.
+        traceContext: {},
       },
     });
+  });
+
+  it('add는 캡처한 trace 헤더를 traceContext로 저장한다', async () => {
+    // Sentry 미초기화라 captureTraceHeaders()는 {} 를 반환 → traceContext에 {}가 담긴다.
+    // (핵심: create data에 traceContext 키가 전달되는지)
+    const create = jest.fn().mockResolvedValue({});
+    const tx = { outboxEvent: { create } } as unknown as TransactionClient;
+    const store = new PrismaOutboxStore(MAX_ATTEMPTS, BASE_MS, CAP_MS);
+
+    await store.add(event, tx);
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          traceContext: expect.any(Object) as object,
+        }) as object,
+      }),
+    );
   });
 
   it('markPublished는 PUBLISHED·publishedAt로 갱신한다', async () => {

@@ -1,5 +1,4 @@
-import { NotificationWorkerController } from './notification-worker.controller';
-import { HandleEventUseCase } from '../application/handle-event.use-case';
+import { AuditWorkerController } from './audit-worker.controller';
 import { DomainEvent } from '../../events/domain-event';
 import { EventType, EntityType } from '../../events/event-type.enum';
 
@@ -18,22 +17,21 @@ const fakeCtx = {
   getMessage: () => ({ headers: {} }),
 } as unknown as import('@nestjs/microservices').KafkaContext;
 
-describe('NotificationWorkerController', () => {
-  it('chat·board 이벤트를 HandleEventUseCase로 위임한다', async () => {
-    const handled: DomainEvent[] = [];
-    const useCase = {
-      execute: (e: DomainEvent) => {
-        handled.push(e);
+describe('AuditWorkerController', () => {
+  it('chat·board·membership 이벤트를 AuditLogRepository로 위임한다', async () => {
+    const recorded: DomainEvent[] = [];
+    const audit = {
+      record: (e: DomainEvent) => {
+        recorded.push(e);
         return Promise.resolve();
       },
     };
-    const controller = new NotificationWorkerController(
-      useCase as unknown as HandleEventUseCase,
-    );
+    const controller = new AuditWorkerController(audit);
 
     await controller.onChatEvent(event, fakeCtx);
     await controller.onBoardEvent(event, fakeCtx);
+    await controller.onMembershipEvent(event, fakeCtx);
 
-    expect(handled).toHaveLength(2);
+    expect(recorded).toHaveLength(3);
   });
 });

@@ -228,7 +228,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | **M8** ✅ | 부하 한계 탐색: stress/spike (로컬·DB 풀 좁힘으로 통제 실험) | k6 arrival-rate·병목(DB 풀)·용량 계획 |
 | **M9** ✅ | Outbox 견고화: DLQ(FAILED 격리)·재시도 백오프 | poison message·지수 백오프·운영 견고함 |
 | **M10** ✅ | Sentry 연동 — 에러 추적 + 성능 모니터링 | observability·트랜잭션/스팬·PII 스크러빙·외부 SaaS |
-| **M10.5** *(예정)* | 분산 트레이싱(HTTP→Kafka→워커) | 트레이스 컨텍스트 전파·Outbox 연계 |
+| **M10.5** ✅ | 분산 트레이싱: HTTP→Outbox→Kafka→워커 trace 컨텍스트 전파 | Sentry 컨텍스트 전파·Kafka 헤더 캐리어·Outbox 지연 발행 연계 |
 | **M11** ✅ | 측정 기반 성능 개선: 좋아요 카운터 Redis 전환 + k6 전후 측정 | 파생 캐시·원자 카운터·drift/TTL 치유·통제 실험 |
 | **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 + Claude 자동 PR 리뷰 | GitHub Actions·서비스 컨테이너·migrate diff·claude-code-action |
 | **F1** ✅ | OAuth 소셜 로그인(카카오) | 카카오 code 교환·Account 모델·우리 JWT 발급 |

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DomainEvent } from '../../events/domain-event';
 import { topicForEvent } from '../../events/event-type.enum';
+import { captureTraceHeaders } from '../../common/tracing/trace-propagation';
 import { OutboxStatus } from '../domain/outbox-status.enum';
 import { OutboxRecord } from '../domain/outbox-record';
 import { OutboxStore } from '../domain/outbox-store';
@@ -22,6 +23,7 @@ interface OutboxRow {
   partitionKey: string;
   payload: DomainEvent;
   attempts: number;
+  traceContext: Record<string, string> | null;
 }
 
 @Injectable()
@@ -41,6 +43,8 @@ export class PrismaOutboxStore implements OutboxStore {
         partitionKey: event.entityId,
         payload: event as unknown as Prisma.InputJsonValue,
         status: OutboxStatus.Pending,
+        // 발행 시점(=요청 컨텍스트)의 trace를 캡처해 저장. relay가 되살려 재발행한다.
+        traceContext: captureTraceHeaders(),
       },
     });
   }
@@ -52,7 +56,7 @@ export class PrismaOutboxStore implements OutboxStore {
     tx: TransactionClient,
   ): Promise<OutboxRecord[]> {
     const rows = await tx.$queryRaw<OutboxRow[]>(Prisma.sql`
-      SELECT id, "eventId", "eventType", topic, "partitionKey", payload, attempts
+      SELECT id, "eventId", "eventType", topic, "partitionKey", payload, attempts, "traceContext"
       FROM "OutboxEvent"
       WHERE status = ${OutboxStatus.Pending}
         AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= now())
@@ -68,6 +72,7 @@ export class PrismaOutboxStore implements OutboxStore {
       partitionKey: r.partitionKey,
       payload: r.payload,
       attempts: r.attempts,
+      traceContext: r.traceContext ?? undefined,
     }));
   }
 

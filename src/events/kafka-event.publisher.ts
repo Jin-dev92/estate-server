@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { EventPublisher } from './event-publisher';
 import { DomainEvent } from './domain-event';
 import { topicForEvent } from './event-type.enum';
+import { captureTraceHeaders } from '../common/tracing/trace-propagation';
 
 export const KAFKA_CLIENT = 'KAFKA_CLIENT';
 
@@ -38,8 +39,11 @@ export class KafkaEventPublisher implements EventPublisher, OnModuleInit {
   private emit(event: DomainEvent): Promise<void> {
     const topic = topicForEvent(event.eventType);
     // 파티션 키 = entityId → 같은 엔티티 이벤트의 순서 보장.
+    // 현재 활성 trace를 Kafka 헤더로 전파(직접 발행 경로). Outbox 경로는 relay가
+    // continueTrace로 컨텍스트를 되살린 뒤 이 메서드를 타므로, 여기 한 곳이면 충분하다.
+    const headers = captureTraceHeaders();
     return firstValueFrom(
-      this.client.emit(topic, { key: event.entityId, value: event }),
+      this.client.emit(topic, { key: event.entityId, value: event, headers }),
     ).then(() => undefined);
   }
 }
