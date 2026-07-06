@@ -230,6 +230,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | **M10** ✅ | Sentry 연동 — 에러 추적 + 성능 모니터링 | observability·트랜잭션/스팬·PII 스크러빙·외부 SaaS |
 | **M10.5** ✅ | 분산 트레이싱: HTTP→Outbox→Kafka→워커 trace 컨텍스트 전파 | Sentry 컨텍스트 전파·Kafka 헤더 캐리어·Outbox 지연 발행 연계 |
 | **M11** ✅ | 측정 기반 성능 개선: 좋아요 카운터 Redis 전환 + k6 전후 측정 | 파생 캐시·원자 카운터·drift/TTL 치유·통제 실험 |
+| **M12** *(예정)* | 회복탄력성 패턴: 카카오 OAuth에 재시도·서킷 브레이커·벌크헤드(cockatiel) | 멱등성과 재시도 안전성·fail-fast·정책 조합 순서·동시성 격리 |
 | **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 + Claude 자동 PR 리뷰 | GitHub Actions·서비스 컨테이너·migrate diff·claude-code-action |
 | **F1** ✅ | OAuth 소셜 로그인(카카오) | 카카오 code 교환·Account 모델·우리 JWT 발급 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
