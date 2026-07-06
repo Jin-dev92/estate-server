@@ -41,13 +41,25 @@ export class RedisLikeCounter implements LikeCounter {
 
   async getMany(postIds: string[]): Promise<Map<string, number>> {
     if (postIds.length === 0) return new Map();
-    const values = await this.redis.mget(postIds.map(countKey));
+    // Cluster 전환 대비: 서로 다른 postId 키는 슬롯이 흩어져 MGET이 CROSSSLOT 에러를 낸다.
+    // 키별 GET을 파이프라인으로 묶으면 standalone·Cluster 모두 안전하다(ioredis가
+    // Cluster에선 노드별로 명령을 분배). 왕복 1회로 묶는 이점도 그대로 유지된다.
+    const pipeline = this.redis.pipeline();
+    postIds.forEach((id) => pipeline.get(countKey(id)));
+    const rows = await pipeline.exec();
     const result = new Map<string, number>();
     postIds.forEach((id, i) => {
-      const v = values[i];
-      if (v !== null) result.set(id, Number(v));
+      // exec 결과는 [error, value] 튜플의 배열. 에러 슬롯은 미스로 간주해 건너뛴다.
+      const [err, value] = rows?.[i] ?? [null, null];
+      if (!err && value !== null && value !== undefined) {
+        result.set(id, Number(value));
+      }
     });
     return result;
+  }
+
+  async remove(postId: string): Promise<void> {
+    await this.redis.del(countKey(postId));
   }
 
   async backfill(entries: Map<string, number>): Promise<void> {

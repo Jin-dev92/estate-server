@@ -3,6 +3,18 @@ import { Post } from '../domain/post.entity';
 import { PostCategory } from '../domain/post-category.enum';
 import { PostRepository } from '../domain/post.repository';
 import { BoardCache } from './board-cache';
+import { LikeCounter } from './like-counter';
+
+// 좋아요 카운터 mock. 삭제 유스케이스는 remove만 호출하므로 그 감시가 핵심.
+function createLikeCounter() {
+  return {
+    increment: jest.fn(),
+    decrement: jest.fn(),
+    getMany: jest.fn(),
+    backfill: jest.fn(),
+    remove: jest.fn(),
+  } satisfies jest.Mocked<LikeCounter>;
+}
 
 const POST_ID = 'p1';
 const BUILDING_ID = 'b1';
@@ -62,18 +74,24 @@ describe('DeletePostUseCase', () => {
   it('작성자가 삭제하면 repository.delete 호출 후 상세·목록 캐시를 무효화한다', async () => {
     const { repo, deleted } = postRepoWith(ownedPost);
     const cache = new SpyCache();
-    const useCase = new DeletePostUseCase(repo, cache);
+    const likeCounter = createLikeCounter();
+    const useCase = new DeletePostUseCase(repo, cache, likeCounter);
 
     await useCase.execute({ userId: AUTHOR_ID, postId: POST_ID });
 
     expect(deleted).toEqual([POST_ID]);
     expect(cache.invalidatedDetail).toBe(POST_ID);
     expect(cache.invalidatedList).toBe(BUILDING_ID);
+    expect(likeCounter.remove).toHaveBeenCalledWith(POST_ID);
   });
 
   it('작성자가 아니면 BOARD_NOT_AUTHOR로 거부하고 삭제하지 않는다', async () => {
     const { repo, deleted } = postRepoWith(ownedPost);
-    const useCase = new DeletePostUseCase(repo, new SpyCache());
+    const useCase = new DeletePostUseCase(
+      repo,
+      new SpyCache(),
+      createLikeCounter(),
+    );
 
     await expect(
       useCase.execute({ userId: 'other', postId: POST_ID }),
@@ -83,7 +101,11 @@ describe('DeletePostUseCase', () => {
 
   it('없는 글이면 BOARD_POST_NOT_FOUND', async () => {
     const { repo } = postRepoWith(null);
-    const useCase = new DeletePostUseCase(repo, new SpyCache());
+    const useCase = new DeletePostUseCase(
+      repo,
+      new SpyCache(),
+      createLikeCounter(),
+    );
 
     await expect(
       useCase.execute({ userId: AUTHOR_ID, postId: POST_ID }),

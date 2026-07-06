@@ -28,6 +28,7 @@ describe('PrismaNotificationRepository', () => {
       create: jest.Mock;
       findMany: jest.Mock;
       updateMany: jest.Mock;
+      count: jest.Mock;
     };
   };
   let repo: PrismaNotificationRepository;
@@ -38,6 +39,7 @@ describe('PrismaNotificationRepository', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         updateMany: jest.fn(),
+        count: jest.fn(),
       },
     };
     repo = new PrismaNotificationRepository(prisma as unknown as PrismaService);
@@ -86,6 +88,15 @@ describe('PrismaNotificationRepository', () => {
     expect(prisma.notification.updateMany).toHaveBeenCalledWith({
       where: { recipientId: 'u1', readAt: null },
       data: { readAt: expect.any(Date) as Date },
+    });
+  });
+
+  it('countUnread: 미읽음 행 수를 집계한다', async () => {
+    prisma.notification.count.mockResolvedValue(4);
+
+    await expect(repo.countUnread('u1')).resolves.toBe(4);
+    expect(prisma.notification.count).toHaveBeenCalledWith({
+      where: { recipientId: 'u1', readAt: null },
     });
   });
 });

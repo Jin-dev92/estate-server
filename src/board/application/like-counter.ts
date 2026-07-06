@@ -15,4 +15,7 @@ export interface LikeCounter {
   getMany(postIds: string[]): Promise<Map<string, number>>;
   // 미스 채움: SET NX(+TTL). 이미 있는 키는 덮지 않는다(경합 중 증감 반영값 보존).
   backfill(entries: Map<string, number>): Promise<void>;
+  // 글 삭제 시 파생 카운터 키를 제거한다(orphan 방지). TTL로도 자가 소멸하나,
+  // Mutation(Delete) 시 관련 캐시 키를 함께 무효화하는 컨벤션을 지킨다.
+  remove(postId: string): Promise<void>;
 }

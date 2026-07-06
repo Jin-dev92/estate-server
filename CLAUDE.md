@@ -34,10 +34,21 @@ redis.mget('{user:100}:profile', '{user:100}:cart')
 
 - `SET`/`HSET` 등 캐시 쓰기에는 항상 명시적 TTL을 포함한다(예: `'EX', 3600`). TTL 없는 캐시 쓰기 금지.
 - Prisma Mutation(Create/Update/Delete) 시, 관련 캐시 키를 함께 `DEL`(무효화)한다.
+- `LPUSH`+`LTRIM` 같은 capped 리스트도 캐시 쓰기다 — `LTRIM`은 길이만 자를 뿐 키를 만료시키지 않으므로 `EXPIRE`를 함께 건다(예: `chat:room:{roomId}:recent`).
+
+### 파생 카운터(derived counter) 패턴
+
+미읽음 수·좋아요 수처럼 **DB 집계(`COUNT(*)`)의 파생 캐시**인 카운터는 "영속 카운터"로 두지 말고 다음 패턴을 따른다. 이렇게 하면 TTL 규칙을 지키면서도 캐시 유실이 영구화되지 않는다.
+
+- **증감은 키가 존재할 때만**(Lua `EXISTS` 가드). 미스 키에 `INCR`하면 `0→1`로 실제 카운트를 잃으므로 건드리지 않는다.
+- **읽기는 "카운터 우선 → 미스면 DB `COUNT` → `SET NX EX` 백필"**. `get`은 미스를 `null`로 신호해 `0`과 구분한다.
+- **TTL은 백필만 소유**한다(증감 시 갱신하지 않음). 그래야 TTL이 drift의 상한(hard ceiling)이 된다.
+- 참고 구현: `board/infrastructure/redis-like-counter.ts`, `notification/infrastructure/redis-notification-counter.ts`.
 
 ### 연결 관리
 
-개별 서비스에서 Redis 클라이언트를 직접 `connect()`/`disconnect()`하지 않는다. DI로 주입되는 단일 `RedisService`(전역 `RedisModule`)를 통해서만 접근한다.
+- 개별 서비스에서 Redis 클라이언트를 직접 `connect()`/`disconnect()`하지 않는다. DI로 주입되는 단일 `RedisService`(전역 `RedisModule`)를 통해서만 접근한다.
+- pub/sub 구독은 구독 모드 제약상 `redis.duplicate()`로 전용 커넥션을 만드는데, 이 커넥션은 단일 `RedisService` 밖에 있어 자동 정리되지 않는다. 만든 서비스가 `OnModuleDestroy`에서 직접 `quit()`해 연결 누수를 막는다.
 
 ---
 

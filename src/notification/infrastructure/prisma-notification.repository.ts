@@ -75,6 +75,12 @@ export class PrismaNotificationRepository implements NotificationRepository {
     return res.count === 1;
   }
 
+  async countUnread(userId: string): Promise<number> {
+    return this.prisma.notification.count({
+      where: { recipientId: userId, readAt: null },
+    });
+  }
+
   private toEntity(row: NotificationRow): Notification {
     return Notification.reconstitute({
       id: row.id,
