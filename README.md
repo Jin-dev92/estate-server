@@ -230,18 +230,19 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | **M10** ✅ | Sentry 연동 — 에러 추적 + 성능 모니터링 | observability·트랜잭션/스팬·PII 스크러빙·외부 SaaS |
 | **M10.5** ✅ | 분산 트레이싱: HTTP→Outbox→Kafka→워커 trace 컨텍스트 전파 | Sentry 컨텍스트 전파·Kafka 헤더 캐리어·Outbox 지연 발행 연계 |
 | **M11** ✅ | 측정 기반 성능 개선: 좋아요 카운터 Redis 전환 + k6 전후 측정 | 파생 캐시·원자 카운터·drift/TTL 치유·통제 실험 |
-| **M12** *(예정)* | 회복탄력성 패턴: 카카오 OAuth에 재시도·서킷 브레이커·벌크헤드(cockatiel) | 멱등성과 재시도 안전성·fail-fast·정책 조합 순서·동시성 격리 |
+| **M12** ✅ | 회복탄력성 패턴: 카카오 OAuth에 재시도·서킷 브레이커·벌크헤드(cockatiel) | 멱등성과 재시도 안전성·fail-fast·정책 조합 순서·동시성 격리 |
 | **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 + Claude 자동 PR 리뷰 | GitHub Actions·서비스 컨테이너·migrate diff·claude-code-action |
 | **F1** ✅ | OAuth 소셜 로그인(카카오) | 카카오 code 교환·Account 모델·우리 JWT 발급 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
 
 > M0~M7은 1차 범위이며 각 단계가 독립적으로 동작 검증되도록 끊었습니다. 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시킵니다.
 >
-> **운영·견고함 후속(M8·M9·M10·M11·CI)** — M0~M7로 핵심 기능·정합성·부하 baseline은 끝났고, 그 위에 운영 견고함·관측성·측정 기반 성능 개선을 얹는 후속이다. 각 항목의 배경·트레이드오프는 [학습 노트](docs/study/마일스톤-학습-노트.md)(부하 stress/spike §8.5, Outbox DLQ §8, 좋아요 카운터 전환 §8.7)에 정리해 두었다. 순서는 느슨하며 우선순위에 따라 조정한다.
+> **운영·견고함 후속(M8·M9·M10·M11·M12·CI)** — M0~M7로 핵심 기능·정합성·부하 baseline은 끝났고, 그 위에 운영 견고함·관측성·측정 기반 성능 개선을 얹는 후속이다. 각 항목의 배경·트레이드오프는 [학습 노트](docs/study/마일스톤-학습-노트.md)(부하 stress/spike §8.5, Outbox DLQ §8, 좋아요 카운터 전환 §8.7)에 정리해 두었다. 순서는 느슨하며 우선순위에 따라 조정한다.
 > - **M8 (stress/spike):** ✅ 한계점·병목 탐색. 로컬 단일 머신은 "앱이 아니라 머신이 먼저 한계"라, 별도 부하 머신 대신 **DB 커넥션 풀을 1로 좁혀**(`connection_limit=1`) *앱이 먼저, 예측 지점에서* 터지게 하는 **통제 실험**으로 진행했다. closed VU로는 backpressure가 숨으니 open(arrival-rate) executor로 갔다. 결과는 §3.5.
 > - **M9 (Outbox DLQ):** ✅ poison message(영원히 실패)를 `PENDING → FAILED`로 격리해 무한 재시도를 끊었다. 실패 시 지수 백오프(`base*2^n`, cap)로 재시도하다 `OUTBOX_MAX_ATTEMPTS` 초과 시 격리하고, `lastError`/`failedAt`로 사후 조사. replay(되살리기)는 후속.
 > - **M10 (Sentry):** ✅ 에러 추적 + 성능 모니터링. M2.5 에러 봉투는 *사용자에게* 깔끔한 응답을 주지만 서버 내부는 로그뿐 → 5xx·미처리 예외·outbox poison을 Sentry로 보내 **풀 스택 + userId·role·path** 컨텍스트를 남긴다(4xx·예상 예외는 제외 — 단 422·400-validation은 FE/계약 버그 신호라 `SENTRY_4XX_SAMPLE_RATE`로 저샘플 캡처 옵션, 기본 off). HTTP 요청은 `tracesSampler`로 경로별 트랜잭션 계측(/docs 제외, M7 성능 측정의 운영판). DSN 없으면 no-op, `sendDefaultPii:false` + beforeSend로 PII 스크럽. *트레이드오프(관측성 ↔ 외부 의존):* 디버깅이 빨라지지만 외부 SaaS 의존·DSN 관리·PII 스크러빙이 따른다(DSN은 서버 env로만). **분산 트레이싱(HTTP→Kafka→워커)은 M10.5로 분리.**
 > - **M11 (좋아요 카운터 Redis 전환):** ✅ 게시글 좋아요 수 조회를 라이브 `COUNT(*)`에서 Redis 원자 카운터(`LikeCountReader`, 미스 시 COUNT로 재구축 후 `SET NX` 백필)로 전환하고, 전환 전/후를 k6로 실측 비교했다. 카운터는 `PostLike` 테이블의 **파생 캐시**이며 진실 원천이 아니다 — 증감은 좋아요/취소 트랜잭션이 **커밋된 이후에만** best-effort로 수행하고, TTL(3600s)로 drift를 주기적으로 치유한다. 실측 결과 before는 볼륨(글당 좋아요 수)에 비례해 p95가 6.9배까지 증가했지만, after는 같은 구간에서 8.8% 증가에 그쳐 사실상 평평했다(단, 볼륨 0에서는 카운터 조회의 왕복 비용 때문에 COUNT가 오히려 근소하게 유리 — 트레이드오프도 함께 기록). 상세: [`load/results/m11-like-counter.md`](load/results/m11-like-counter.md).
+> - **M12 (회복탄력성 패턴):** ✅ 유일한 외부 SaaS 동기 호출인 카카오 OAuth에 cockatiel로 타임아웃·재시도·서킷 브레이커·벌크헤드를 적용했다. 재시도는 멱등한 프로필 GET에만 건다 — OAuth 인가코드는 1회용이라 토큰 교환 POST 재시도는 코드 이중 사용을 낳는다. 조합은 `retry → circuitBreaker → bulkhead → timeout(시도당)` 순 wrap이며, 거절(회로 open·포화·타임아웃)은 `503 AUTH_KAKAO_UNAVAILABLE`로 변환하고 4xx는 그대로 전파한다. 서킷 상태 변화는 로깅+Sentry로 남긴다(조용히 실패하는 서킷 금지). 파라미터 6종은 env로 튜닝 가능(실측 전 잠정값). 상세: 학습 노트 §8.10.
 > - **CI (통합):** M7 부하 **smoke 자동화**(Actions 서비스 컨테이너로 PG·Redis·Kafka 기동 → 시드 → smoke → threshold 실패 시 red)를 시작점으로, **추가하고 싶은 CI 항목(린트·테스트·빌드·배포 등)을 한 마일스톤으로 통합**한다 — 구현은 그 CI 작업 시점에 함께 진행하고, 여기서는 자리만 잡아 둔다.
 >   - **1단계 구현 ✅:** `ci.yml`이 PR(→dev·main)에서 `nest build`(타입체크)와 Prisma 마이그레이션 drift(`migrate diff --exit-code`)를 검증한다. `version-bump.yml`(수동)은 커밋 타입으로 `package.json` 버전을 올려 dev로 PR을 연다. 부하 smoke·lint·test·CD는 후속.
 
