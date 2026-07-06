@@ -28,7 +28,7 @@
 
 ## 3. 정책 조합 (위키 필수 순서)
 
-`wrap()`은 첫 인자가 최외곽입니다. 위키 규칙 `Timeout → Retry → CircuitBreaker → Bulkhead` 합성을 따릅니다.
+`wrap()`은 첫 인자가 최외곽입니다. 위키의 장애 대응 정책 조합 규칙에 따라 **재시도(retry)를 가장 바깥, 타임아웃(timeout)을 가장 안쪽(시도당)** 으로 중첩합니다 — 정확한 중첩은 아래 다이어그램이 기준입니다(재시도 → 서킷 브레이커 → 벌크헤드 → 타임아웃).
 
 ```
 프로필 GET :  retry ( circuitBreaker ( bulkhead ( timeout ( fetch ) ) ) )
