@@ -92,6 +92,11 @@ export class AuthController {
     type: ErrorResponseDto,
     description: 'Account는 있으나 연결된 User 없음',
   })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: '카카오 일시 장애(circuit open·포화·타임아웃) — M12',
+  })
   kakaoLoginHandler(@Body() dto: KakaoLoginDto) {
     return this.kakaoLogin.execute(dto);
   }

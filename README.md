@@ -259,7 +259,7 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 |---|---|---|
 | `POST /auth/signup` | 회원가입(기본 역할 TENANT; `role` 선택적 — OWNER·TENANT만 허용, ADMIN 불가) | 공개 |
 | `POST /auth/login` | 로그인, JWT `accessToken` 발급 | 공개 |
-| `POST /auth/kakao` | 카카오 로그인(code 교환) — 기존 유저 `{accessToken}`, 신규 `{onboardingToken}` | 공개 |
+| `POST /auth/kakao` | 카카오 로그인(code 교환) — 기존 유저 `{accessToken}`, 신규 `{onboardingToken}`. 카카오 장애 시 `503 AUTH_KAKAO_UNAVAILABLE`(M12) | 공개 |
 | `POST /auth/kakao/complete` | 카카오 신규 가입 완료(역할 선택) → `{accessToken}` | 공개(onboarding 토큰 보유) |
 | `GET /auth/me` | 내 정보(id·email·role) 조회(토큰 기반, DB 미조회) | 인증 |
 | `GET /auth/profile` | 프로필(id·email·name·role) 조회(DB) | 인증(본인) |
