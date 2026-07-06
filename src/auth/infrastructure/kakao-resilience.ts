@@ -27,6 +27,18 @@ const DEFAULTS = {
   bulkheadQueue: 20,
 } as const;
 
+// env 값(문자열)을 숫자로 파싱. 미설정·빈 문자열·비숫자("abc")는 모두 fallback으로 흘린다.
+// 가드가 없으면 Number("abc")=NaN·Number("")=0 이 cockatiel 정책 생성자에 그대로 전달돼
+// 타임아웃/임계가 조용히 오작동한다. "0" 같은 정상값(예: 벌크헤드 큐 0)은 그대로 보존한다.
+export function parseEnvNumber(
+  raw: string | undefined,
+  fallback: number,
+): number {
+  if (raw == null || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // 일시적(카카오 측) 오류만 재시도·브레이커 집계 대상(handleAll 금지 — 위키 팀룰).
 // - TaskCancelledError: 시도당 타임아웃(최내곽 timeout 정책)
 // - TypeError: fetch 네트워크 오류(연결 거부·DNS 등)
@@ -51,11 +63,9 @@ export class KakaoResilience {
   readonly profilePolicy: IPolicy;
 
   constructor(config: ConfigService) {
-    // env는 문자열로 오므로 숫자 변환. 미설정 시 코드 기본값.
-    const num = (key: ConfigKey, fallback: number): number => {
-      const raw = config.get<string>(key);
-      return raw != null ? Number(raw) : fallback;
-    };
+    // env는 문자열로 오므로 숫자 변환. 미설정·빈 문자열·비숫자는 코드 기본값으로 폴백.
+    const num = (key: ConfigKey, fallback: number): number =>
+      parseEnvNumber(config.get<string>(key), fallback);
 
     // 시도당 타임아웃. Aggressive = 콜백 완료를 기다리지 않고 즉시 거절 + AbortSignal 전파.
     const timeoutPolicy = timeout(

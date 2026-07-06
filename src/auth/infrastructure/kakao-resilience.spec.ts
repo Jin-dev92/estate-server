@@ -1,6 +1,8 @@
 import { ConfigService } from '@nestjs/config';
-import { KakaoResilience } from './kakao-resilience';
+import { KakaoResilience, parseEnvNumber } from './kakao-resilience';
 import { KakaoApiError } from './kakao-api.error';
+
+const FALLBACK = 3000;
 
 // env 미설정(기본값) ConfigService stub. overrides로 특정 키만 주입.
 function stubConfig(overrides?: Record<string, string>): ConfigService {
@@ -59,5 +61,35 @@ describe('KakaoResilience', () => {
     ).rejects.toThrow('카카오 토큰 교환 실패: 500');
 
     expect(calls).toBe(1);
+  });
+});
+
+describe('parseEnvNumber', () => {
+  describe('유효한 숫자 문자열', () => {
+    it('숫자로 변환한다', () => {
+      expect(parseEnvNumber('5000', FALLBACK)).toBe(5000);
+    });
+
+    it('"0"은 정상값으로 보존한다(예: 벌크헤드 큐 0)', () => {
+      expect(parseEnvNumber('0', FALLBACK)).toBe(0);
+    });
+  });
+
+  describe('폴백 대상', () => {
+    it('미설정(undefined)은 fallback', () => {
+      expect(parseEnvNumber(undefined, FALLBACK)).toBe(FALLBACK);
+    });
+
+    it('빈 문자열은 fallback(Number("")=0 함정 방지)', () => {
+      expect(parseEnvNumber('', FALLBACK)).toBe(FALLBACK);
+    });
+
+    it('공백 문자열은 fallback', () => {
+      expect(parseEnvNumber('   ', FALLBACK)).toBe(FALLBACK);
+    });
+
+    it('비숫자 문자열("abc")은 fallback(NaN 전달 방지)', () => {
+      expect(parseEnvNumber('abc', FALLBACK)).toBe(FALLBACK);
+    });
   });
 });
