@@ -10,4 +10,6 @@ export interface NotificationRepository {
   markAllRead(userId: string): Promise<void>;
   // 수신자의 단건을 읽음 처리. unread→read로 실제 전이됐으면 true(멱등·소유자 검증).
   markOneRead(userId: string, id: string): Promise<boolean>;
+  // 수신자의 미읽음 행 수(readAt IS NULL). 카운터 캐시 미스 시 재구축의 진실 원천.
+  countUnread(userId: string): Promise<number>;
 }

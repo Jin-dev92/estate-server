@@ -63,6 +63,7 @@ function counterSpy(opts: { fail?: boolean } = {}) {
     },
     getMany: () => Promise.resolve(new Map()),
     backfill: () => Promise.resolve(),
+    remove: () => Promise.resolve(),
   };
   return { counter, decremented };
 }

@@ -12,6 +12,7 @@ function counterWith(hits: Map<string, number>) {
       backfilled.push(entries);
       return Promise.resolve();
     },
+    remove: () => Promise.resolve(),
   };
   return { counter, backfilled };
 }

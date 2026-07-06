@@ -50,6 +50,7 @@ function deps(recipients: string[]) {
     listForUser: () => Promise.resolve([]),
     markAllRead: () => Promise.resolve(),
     markOneRead: () => Promise.resolve(false),
+    countUnread: () => Promise.resolve(0),
   };
   const incremented: string[] = [];
   const counter: NotificationCounter = {
@@ -58,6 +59,7 @@ function deps(recipients: string[]) {
       return Promise.resolve();
     },
     get: () => Promise.resolve(0),
+    backfill: () => Promise.resolve(),
     reset: () => Promise.resolve(),
     decrement: () => Promise.resolve(),
   };
@@ -94,6 +96,7 @@ describe('HandleEventUseCase', () => {
       listForUser: () => Promise.resolve([]),
       markAllRead: () => Promise.resolve(),
       markOneRead: () => Promise.resolve(false),
+      countUnread: () => Promise.resolve(0),
     };
     const useCase = new HandleEventUseCase(resolver, repo, counter, relay);
 

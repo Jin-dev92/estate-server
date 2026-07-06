@@ -80,6 +80,7 @@ function counterSpy(opts: { fail?: boolean } = {}) {
     decrement: () => Promise.resolve(),
     getMany: () => Promise.resolve(new Map()),
     backfill: () => Promise.resolve(),
+    remove: () => Promise.resolve(),
   };
   return { counter, incremented };
 }

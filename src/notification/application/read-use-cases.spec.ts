@@ -39,13 +39,45 @@ describe('알림 읽기 유스케이스', () => {
     expect(calls).toEqual([['u1', 20]]);
   });
 
-  it('GetUnreadCount: counter.get 위임', async () => {
+  it('GetUnreadCount: 캐시 적중이면 카운터 값을 그대로 반환(DB 미조회)', async () => {
+    const counted: string[] = [];
     const counter: Partial<NotificationCounter> = {
       get: () => Promise.resolve(7),
     };
-    const useCase = new GetUnreadCountUseCase(counter as NotificationCounter);
+    const repo: Partial<NotificationRepository> = {
+      countUnread: (u) => {
+        counted.push(u);
+        return Promise.resolve(0);
+      },
+    };
+    const useCase = new GetUnreadCountUseCase(
+      counter as NotificationCounter,
+      repo as NotificationRepository,
+    );
 
     await expect(useCase.execute('u1')).resolves.toBe(7);
+    expect(counted).toEqual([]); // 캐시 적중 시 DB COUNT 안 함
+  });
+
+  it('GetUnreadCount: 캐시 미스(null)면 DB COUNT로 재집계 후 백필', async () => {
+    const backfilled: Array<[string, number]> = [];
+    const counter: Partial<NotificationCounter> = {
+      get: () => Promise.resolve(null),
+      backfill: (u, c) => {
+        backfilled.push([u, c]);
+        return Promise.resolve();
+      },
+    };
+    const repo: Partial<NotificationRepository> = {
+      countUnread: () => Promise.resolve(4),
+    };
+    const useCase = new GetUnreadCountUseCase(
+      counter as NotificationCounter,
+      repo as NotificationRepository,
+    );
+
+    await expect(useCase.execute('u1')).resolves.toBe(4);
+    expect(backfilled).toEqual([['u1', 4]]);
   });
 
   it('MarkAllRead: 행 읽음 + 카운터 reset', async () => {
