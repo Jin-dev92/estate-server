@@ -55,6 +55,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cockatiel": "^3.2.1",
     "ioredis": "^5.11.1",
     "kafkajs": "^2.2.4",
     "passport": "^0.7.0",
