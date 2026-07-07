@@ -25,6 +25,10 @@ const DEFAULTS = {
   breakerHalfOpenMs: 10_000,
   bulkheadConcurrent: 10,
   bulkheadQueue: 20,
+  // 프로필 GET 재시도 전체(초기 시도 + 재시도 + 백오프)의 벽시계 상한.
+  // 시도당 타임아웃만으로는 "느린(죽지 않은) 카카오"에서 재시도가 스택돼 꼬리 지연이
+  // 폭증한다(실측 p95 ~15s). 이 총 예산이 그 상한을 건다(위키 "전체 재시도 타임아웃 예산").
+  totalTimeoutMs: 8000,
 } as const;
 
 // env 값(문자열)을 숫자로 파싱. 미설정·빈 문자열·비숫자("abc")는 모두 fallback으로 흘린다.
@@ -47,6 +51,7 @@ export interface ResilienceConfig {
   breakerHalfOpenMs: number;
   bulkheadConcurrent: number;
   bulkheadQueue: number;
+  totalTimeoutMs: number; // 프로필 재시도 전체의 벽시계 상한
 }
 
 // 설정 검증. 두 종류로 나뉜다.
@@ -80,6 +85,7 @@ export function validateResilienceConfig(
   requireMin('breakerHalfOpenMs', cfg.breakerHalfOpenMs, 1);
   requireIntMin('bulkheadConcurrent', cfg.bulkheadConcurrent, 1);
   requireIntMin('bulkheadQueue', cfg.bulkheadQueue, 0);
+  requireMin('totalTimeoutMs', cfg.totalTimeoutMs, 1);
   if (errors.length > 0) {
     throw new Error(
       `[${name}] 회복탄력성 설정이 유효하지 않습니다: ${errors.join(', ')}`,
@@ -93,6 +99,14 @@ export function validateResilienceConfig(
       `[${name}] breakerThreshold(${cfg.breakerThreshold}) < retryMaxAttempts+1(${multiplier}) — ` +
         `재시도가 브레이커 카운트를 배수로 소모해 로그인 1회 실패로 회로가 열릴 수 있습니다. ` +
         `breakerThreshold를 (재시도 횟수 + 1) 이상으로 두는 것을 권장합니다.`,
+    );
+  }
+  // 총 예산이 시도당 타임아웃보다 작으면 첫 시도도 완료 전에 잘려 프로필이 항상 실패한다.
+  if (cfg.totalTimeoutMs < cfg.timeoutMs) {
+    warnings.push(
+      `[${name}] totalTimeoutMs(${cfg.totalTimeoutMs}) < timeoutMs(${cfg.timeoutMs}) — ` +
+        `총 예산이 시도당 타임아웃보다 작아 첫 시도도 완료하지 못하고 잘릴 수 있습니다. ` +
+        `totalTimeoutMs를 시도당 타임아웃 이상으로 두는 것을 권장합니다.`,
     );
   }
   return warnings;
@@ -145,6 +159,10 @@ export class KakaoResilience {
         DEFAULTS.bulkheadConcurrent,
       ),
       bulkheadQueue: num(ConfigKey.KakaoBulkheadQueue, DEFAULTS.bulkheadQueue),
+      totalTimeoutMs: num(
+        ConfigKey.KakaoTotalTimeoutMs,
+        DEFAULTS.totalTimeoutMs,
+      ),
     };
     // 잘못된 값이면 throw(기동 fail-fast), 위험한 조합이면 경고.
     // 경고는 로그에만 남기면 배포 시점에 묻힐 수 있어 Sentry로도 알린다
@@ -181,11 +199,21 @@ export class KakaoResilience {
       backoff: new ExponentialBackoff(),
     });
 
+    // 프로필 재시도 전체(시도 + 백오프)의 벽시계 상한. retry보다 바깥에 둬야
+    // 재시도 스택 전체를 감싼다 — 느린 카카오에서 꼬리 지연(실측 p95 ~15s)을 끊는다.
+    const totalTimeoutPolicy = timeout(
+      cfg.totalTimeoutMs,
+      TimeoutStrategy.Aggressive,
+    );
+
     // wrap은 첫 인자가 최외곽(위키 필수 순서: Retry → CB → Bulkhead → Timeout).
     // retry가 breaker 바깥이라 각 재시도가 브레이커에 개별 집계되고,
     // 도중 open되면 남은 재시도가 즉시 차단된다. 순서 임의 변경 금지.
+    // 토큰은 재시도가 없어 시도당 타임아웃으로 이미 상한이 걸리므로 총 예산 불필요.
     this.tokenPolicy = wrap(breaker, bulkheadPolicy, timeoutPolicy);
+    // 프로필은 총 예산을 최외곽에 둬 재시도 스택 전체를 감싼다.
     this.profilePolicy = wrap(
+      totalTimeoutPolicy,
       retryPolicy,
       breaker,
       bulkheadPolicy,

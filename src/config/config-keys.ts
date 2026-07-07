@@ -31,4 +31,5 @@ export const enum ConfigKey {
   KakaoBreakerHalfOpenMs = 'KAKAO_BREAKER_HALF_OPEN_MS',
   KakaoBulkheadConcurrent = 'KAKAO_BULKHEAD_CONCURRENT',
   KakaoBulkheadQueue = 'KAKAO_BULKHEAD_QUEUE',
+  KakaoTotalTimeoutMs = 'KAKAO_TOTAL_TIMEOUT_MS',
 }

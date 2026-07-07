@@ -23,6 +23,7 @@ function validConfig(overrides?: Partial<ResilienceConfig>): ResilienceConfig {
     breakerHalfOpenMs: 10_000,
     bulkheadConcurrent: 10,
     bulkheadQueue: 20,
+    totalTimeoutMs: 8000,
     ...overrides,
   };
 }
@@ -138,6 +139,17 @@ describe('validateResilienceConfig', () => {
         validateResilienceConfig('kakao', validConfig({ bulkheadQueue: 0 })),
       ).not.toThrow();
     });
+
+    it('totalTimeoutMs < timeoutMs 이면 경고를 반환한다', () => {
+      const warnings = validateResilienceConfig(
+        'kakao',
+        validConfig({ totalTimeoutMs: 2000, timeoutMs: 3000 }),
+      );
+
+      expect(warnings).toContainEqual(
+        expect.stringContaining('totalTimeoutMs'),
+      );
+    });
   });
 
   describe('잘못된 값은 throw(기동 fail-fast)', () => {
@@ -170,6 +182,37 @@ describe('validateResilienceConfig', () => {
         ),
       ).toThrow();
     });
+
+    it('totalTimeoutMs가 1 미만이면 throw', () => {
+      expect(() =>
+        validateResilienceConfig('kakao', validConfig({ totalTimeoutMs: 0 })),
+      ).toThrow();
+    });
+  });
+});
+
+describe('KakaoResilience 총 예산(total timeout budget)', () => {
+  it('느린 프로필 재시도를 총 예산으로 끊는다(재시도 스택 상한)', async () => {
+    // 총 예산 250ms · 시도당 100ms · 재시도 10회 · 임계 높게(브레이커 간섭 배제).
+    // 총 예산이 없으면 10회 × 100ms + 백오프로 1초 이상 걸리지만, 예산이 끊어야 한다.
+    const r = new KakaoResilience(
+      stubConfig({
+        KAKAO_TOTAL_TIMEOUT_MS: '250',
+        KAKAO_TIMEOUT_MS: '100',
+        KAKAO_RETRY_MAX_ATTEMPTS: '10',
+        KAKAO_BREAKER_THRESHOLD: '100',
+      }),
+    );
+
+    const started = Date.now();
+    // 영원히 매달리는 호출 → 시도당 타임아웃으로 재시도 반복 → 총 예산이 최종 상한.
+    await expect(
+      r.profilePolicy.execute(() => new Promise<never>(() => {})),
+    ).rejects.toThrow();
+    const elapsed = Date.now() - started;
+
+    // 재시도 10회(1초+)가 아니라 총 예산(250ms) 근처에서 끊겼는지.
+    expect(elapsed).toBeLessThan(600);
   });
 });
 

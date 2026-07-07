@@ -34,14 +34,22 @@ const THINK_MS = Number(process.env.HARNESS_THINK_MS) || 120;
 // ---- 가짜 카카오(fault injection) -----------------------------------------
 interface Health {
   name: string;
-  // 호출 1건의 지연(ms). 분포를 흉내내려고 매 호출 랜덤.
-  latencyMs: () => number;
+  // 호출 1건의 지연(ms). isToken=true면 토큰 교환, false면 프로필 조회.
+  // 총 예산은 프로필만 감싸므로, 둘을 나눠야 예산 효과를 격리 측정할 수 있다.
+  latencyMs: (isToken: boolean) => number;
   // null=정상, 숫자=HTTP non-ok status, 'network'=fetch TypeError.
   failure: () => number | 'network' | null;
 }
 
 function uniform(min: number, max: number): () => number {
   return () => min + Math.random() * (max - min);
+}
+// 토큰/프로필에 서로 다른 지연을 준다(토큰 빠름·프로필 느림 등).
+function split(
+  tokenFn: () => number,
+  profileFn: () => number,
+): (isToken: boolean) => number {
+  return (isToken) => (isToken ? tokenFn() : profileFn());
 }
 function rate(p: number, status: number): () => number | null {
   return () => (Math.random() < p ? status : null);
@@ -56,6 +64,7 @@ function installFetch(h: Health): void {
   ): Promise<unknown> =>
     new Promise((resolve, reject) => {
       const signal = init?.signal;
+      const isToken = url.includes('oauth/token');
       const timer = setTimeout(() => {
         const f = h.failure();
         if (f === 'network') {
@@ -64,11 +73,11 @@ function installFetch(h: Health): void {
         }
         const ok = f === null;
         const status = ok ? 200 : f;
-        const body = url.includes('oauth/token')
+        const body = isToken
           ? { access_token: 'AT' }
           : { id: 1, kakao_account: {} };
         resolve({ ok, status, json: () => Promise.resolve(body) });
-      }, h.latencyMs());
+      }, h.latencyMs(isToken));
       if (signal) {
         signal.addEventListener('abort', () => {
           clearTimeout(timer);
@@ -207,6 +216,29 @@ const scenarios: Scenario[] = [
     variants: [
       { label: 'timeout 3000(default)', params: DEFAULT },
       { label: 'timeout 1500', params: { KAKAO_TIMEOUT_MS: '1500' } },
+    ],
+  },
+  {
+    // 예산 효과 격리: 토큰은 빠르게 성공(예산 밖), 프로필은 매 시도가 타임아웃(3s)을
+    // 넘겨 재시도가 스택된다. 총 예산이 없으면 4시도×3s+백오프 ≈ ~15s, 예산 8000이면 8s.
+    health: {
+      name: '프로필 느림(재시도 스택)',
+      latencyMs: split(uniform(40, 100), uniform(3200, 4200)),
+      failure: () => null,
+    },
+    // 브레이커 임계를 높게(100) 둬 회로가 열리지 않게 한다 — 그래야 브레이커가
+    // 아니라 "총 예산"이 꼬리를 끊는 효과만 격리해서 볼 수 있다(실전에선 브레이커가
+    // 먼저 열려 보호하지만, 여기선 예산 단독 효과를 측정).
+    note: '토큰 빠름 + 프로필 항상 타임아웃, 브레이커 비활성(임계 100) — 총 예산 단독 효과',
+    variants: [
+      {
+        label: 'budget 8000(default)',
+        params: { KAKAO_BREAKER_THRESHOLD: '100' },
+      },
+      {
+        label: 'budget off(60000)',
+        params: { KAKAO_BREAKER_THRESHOLD: '100', KAKAO_TOTAL_TIMEOUT_MS: '60000' },
+      },
     ],
   },
   {
