@@ -161,11 +161,36 @@ describe('validateResilienceConfig', () => {
         ),
       ).toThrow();
     });
+
+    it('카운트성 필드에 소수가 오면 throw(retryMaxAttempts=2.5)', () => {
+      expect(() =>
+        validateResilienceConfig(
+          'kakao',
+          validConfig({ retryMaxAttempts: 2.5 }),
+        ),
+      ).toThrow();
+    });
   });
 });
 
 describe('KakaoResilience 서킷 상태 콜백', () => {
   afterEach(() => jest.restoreAllMocks());
+
+  it('위험한 설정 조합(임계 < 재시도+1)이면 생성 시 경고를 로깅+Sentry로 알린다', () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    // 임계 2 < 재시도(기본 3)+1=4 → 자문 경고.
+    new KakaoResilience(stubConfig({ KAKAO_BREAKER_THRESHOLD: '2' }));
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('breakerThreshold'),
+    );
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('breakerThreshold'),
+      'warning',
+    );
+  });
 
   it('연속 실패로 회로가 열리면 onBreak가 로깅+Sentry로 알린다', async () => {
     const warn = jest

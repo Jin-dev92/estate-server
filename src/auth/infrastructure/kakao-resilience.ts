@@ -61,17 +61,25 @@ export function validateResilienceConfig(
   cfg: ResilienceConfig,
 ): string[] {
   const errors: string[] = [];
+  // 시간(ms) 필드: 유한수 + 하한.
   const requireMin = (label: string, value: number, min: number): void => {
     if (!Number.isFinite(value) || value < min) {
       errors.push(`${label}=${value}(>= ${min} 이어야 함)`);
     }
   };
+  // 카운트성 필드: 정수 + 하한. cockatiel maxAttempts/threshold 등에 2.5 같은 소수가
+  // 흘러들면 조용히 오작동하므로 정수까지 강제한다.
+  const requireIntMin = (label: string, value: number, min: number): void => {
+    if (!Number.isInteger(value) || value < min) {
+      errors.push(`${label}=${value}(>= ${min} 정수여야 함)`);
+    }
+  };
   requireMin('timeoutMs', cfg.timeoutMs, 1);
-  requireMin('retryMaxAttempts', cfg.retryMaxAttempts, 0);
-  requireMin('breakerThreshold', cfg.breakerThreshold, 1);
+  requireIntMin('retryMaxAttempts', cfg.retryMaxAttempts, 0);
+  requireIntMin('breakerThreshold', cfg.breakerThreshold, 1);
   requireMin('breakerHalfOpenMs', cfg.breakerHalfOpenMs, 1);
-  requireMin('bulkheadConcurrent', cfg.bulkheadConcurrent, 1);
-  requireMin('bulkheadQueue', cfg.bulkheadQueue, 0);
+  requireIntMin('bulkheadConcurrent', cfg.bulkheadConcurrent, 1);
+  requireIntMin('bulkheadQueue', cfg.bulkheadQueue, 0);
   if (errors.length > 0) {
     throw new Error(
       `[${name}] 회복탄력성 설정이 유효하지 않습니다: ${errors.join(', ')}`,
@@ -138,9 +146,12 @@ export class KakaoResilience {
       ),
       bulkheadQueue: num(ConfigKey.KakaoBulkheadQueue, DEFAULTS.bulkheadQueue),
     };
-    // 잘못된 값이면 throw(기동 fail-fast), 위험한 조합이면 경고 로깅.
+    // 잘못된 값이면 throw(기동 fail-fast), 위험한 조합이면 경고.
+    // 경고는 로그에만 남기면 배포 시점에 묻힐 수 있어 Sentry로도 알린다
+    // ("조용히 실패하는 서킷 금지" 원칙과 일관 — 설정 실수도 운영 사고로 이어진다).
     for (const warning of validateResilienceConfig('kakao', cfg)) {
       this.logger.warn(warning);
+      Sentry.captureMessage(warning, 'warning');
     }
 
     // 시도당 타임아웃. Aggressive = 콜백 완료를 기다리지 않고 즉시 거절 + AbortSignal 전파.
