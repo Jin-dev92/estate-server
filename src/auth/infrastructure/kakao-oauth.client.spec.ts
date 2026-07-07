@@ -200,4 +200,48 @@ describe('KakaoOAuthClient', () => {
       });
     });
   });
+
+  describe('전체 시간 예산(total timeout budget)', () => {
+    it('예산 만료 시 진행 중인 프로필 fetch를 signal로 abort하고 503을 낸다', async () => {
+      // per-attempt 타임아웃을 아주 크게(10s) 둬 시도당 타임아웃이 개입 못 하게 하고,
+      // 총 예산만 300ms로 좁힌다 → 오직 총 예산이 프로필을 끊는 상황을 격리한다.
+      const overrides = {
+        KAKAO_TOTAL_TIMEOUT_MS: '300',
+        KAKAO_TIMEOUT_MS: '10000',
+        KAKAO_RETRY_MAX_ATTEMPTS: '5',
+        KAKAO_BREAKER_THRESHOLD: '100',
+      };
+      const client = makeClient(overrides);
+
+      // 토큰은 즉시 성공 → 프로필 단계 진입. 프로필은 영원히 매달리되, signal이
+      // abort되면 그 사실을 기록하고 reject(실제 fetch 취소 동작을 흉내).
+      let profileSignalAborted = false;
+      jest
+        .spyOn(global, 'fetch')
+        .mockImplementation((url: unknown, init?: unknown) => {
+          if (String(url).includes('oauth/token')) {
+            return Promise.resolve(jsonRes({ access_token: 'AT' }));
+          }
+          return new Promise<Response>((_, reject) => {
+            const signal = (init as { signal?: AbortSignal } | undefined)
+              ?.signal;
+            signal?.addEventListener('abort', () => {
+              profileSignalAborted = true;
+              reject(new Error('aborted'));
+            });
+          });
+        });
+
+      const started = Date.now();
+      await expect(
+        client.exchangeAndFetch('code', 'cb'),
+      ).rejects.toMatchObject({ code: KAKAO_UNAVAILABLE_CODE });
+      const elapsed = Date.now() - started;
+
+      // 총 예산이 실제 진행 중이던 fetch에 abort 신호를 전달했는가(프로덕션 배선 검증).
+      expect(profileSignalAborted).toBe(true);
+      // per-attempt(10s)가 아니라 총 예산(300ms)이 끊었는가.
+      expect(elapsed).toBeLessThan(1500);
+    });
+  });
 });
