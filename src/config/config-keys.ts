@@ -25,4 +25,10 @@ export const enum ConfigKey {
   SentryEnvironment = 'SENTRY_ENVIRONMENT',
   SentryTracesSampleRate = 'SENTRY_TRACES_SAMPLE_RATE',
   Sentry4xxSampleRate = 'SENTRY_4XX_SAMPLE_RATE',
+  KakaoTimeoutMs = 'KAKAO_TIMEOUT_MS',
+  KakaoRetryMaxAttempts = 'KAKAO_RETRY_MAX_ATTEMPTS',
+  KakaoBreakerThreshold = 'KAKAO_BREAKER_THRESHOLD',
+  KakaoBreakerHalfOpenMs = 'KAKAO_BREAKER_HALF_OPEN_MS',
+  KakaoBulkheadConcurrent = 'KAKAO_BULKHEAD_CONCURRENT',
+  KakaoBulkheadQueue = 'KAKAO_BULKHEAD_QUEUE',
 }

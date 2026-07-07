@@ -37,4 +37,10 @@ export const AuthError = {
     status: HttpStatus.UNAUTHORIZED,
     message: '가입 세션이 만료되었어요. 다시 시도해주세요.',
   },
+  KAKAO_UNAVAILABLE: {
+    code: 'AUTH_KAKAO_UNAVAILABLE',
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message:
+      '카카오 로그인이 일시적으로 원활하지 않습니다. 잠시 후 다시 시도해주세요.',
+  },
 } as const satisfies Record<string, AppErrorSpec>;

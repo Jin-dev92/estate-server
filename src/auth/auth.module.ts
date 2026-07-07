@@ -23,6 +23,7 @@ import { BcryptPasswordHasher } from './infrastructure/bcrypt-password-hasher';
 import { JwtTokenService } from './infrastructure/jwt-token.service';
 import { PrismaAccountRepository } from './infrastructure/prisma-account.repository';
 import { KakaoOAuthClient } from './infrastructure/kakao-oauth.client';
+import { KakaoResilience } from './infrastructure/kakao-resilience';
 import { OnboardingTokenService } from './infrastructure/onboarding-token.service';
 
 @Module({
@@ -53,6 +54,7 @@ import { OnboardingTokenService } from './infrastructure/onboarding-token.servic
     { provide: PASSWORD_HASHER, useClass: BcryptPasswordHasher },
     { provide: TOKEN_ISSUER, useClass: JwtTokenService },
     { provide: ACCOUNT_REPOSITORY, useClass: PrismaAccountRepository },
+    KakaoResilience,
     { provide: KAKAO_OAUTH, useClass: KakaoOAuthClient },
     { provide: ONBOARDING_TOKEN, useClass: OnboardingTokenService },
   ],
