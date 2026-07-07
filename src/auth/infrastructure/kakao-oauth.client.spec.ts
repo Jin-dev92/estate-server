@@ -233,9 +233,9 @@ describe('KakaoOAuthClient', () => {
         });
 
       const started = Date.now();
-      await expect(
-        client.exchangeAndFetch('code', 'cb'),
-      ).rejects.toMatchObject({ code: KAKAO_UNAVAILABLE_CODE });
+      await expect(client.exchangeAndFetch('code', 'cb')).rejects.toMatchObject(
+        { code: KAKAO_UNAVAILABLE_CODE },
+      );
       const elapsed = Date.now() - started;
 
       // 총 예산이 실제 진행 중이던 fetch에 abort 신호를 전달했는가(프로덕션 배선 검증).
