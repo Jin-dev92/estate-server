@@ -88,6 +88,7 @@
 | `KakaoBreakerHalfOpenMs` | `KAKAO_BREAKER_HALF_OPEN_MS` | 10000 | open → half-open 대기 |
 | `KakaoBulkheadConcurrent` | `KAKAO_BULKHEAD_CONCURRENT` | 10 | 동시 실행 상한 |
 | `KakaoBulkheadQueue` | `KAKAO_BULKHEAD_QUEUE` | 20 | 대기열 크기 |
+| `KakaoTotalTimeoutMs` | `KAKAO_TOTAL_TIMEOUT_MS` | 8000 | 프로필 재시도 전체의 벽시계 상한(느림 꼬리 지연 차단, 후속 실측으로 추가) |
 
 *수치의 근거(위키: 추측값 금지에 대한 예외 명시):* 이 프로젝트에는 카카오 호출 실측(부하 테스트·트래픽 통계)이 없다. 위 값은 보수적 잠정값이며, 주석과 본 문서에 "실측 전 잠정값 — k6 실측 후 튜닝"을 명시해 규칙 위반을 투명하게 처리한다. 브레이커 open 기준을 연속 실패(ConsecutiveBreaker)로 두는 것은 트래픽이 적은 의존성에 대한 위키 기본값이다.
 
@@ -111,6 +112,6 @@
 
 ## 10. 범위 밖 (후속 여지)
 
-- `429 Retry-After` 헤더 존중(§4), 벌크헤드·브레이커 수치의 k6 실측 튜닝(§7).
+- `429 Retry-After` 헤더 존중(§4). 파라미터 실측 튜닝은 하네스로 진행([`load/results/m12-resilience.md`](../../../load/results/m12-resilience.md)), 그 과정에서 발견한 "느린 카카오 꼬리 지연"은 **전체 시간 예산(`KAKAO_TOTAL_TIMEOUT_MS`)으로 해소 완료**. 6종+1 값의 최종 확정은 프로덕션 실데이터 후속.
 - Redis·DB 등 내부 인프라 I/O에의 확대 적용 — 위키 규칙상 대상이나, 이미 각자 드라이버 레벨 재연결·풀 상한이 있고 이번 학습 범위는 외부 SaaS 경로로 한정한다.
 - 카카오 외 둘째 외부 의존성 등장 시 resilience 모듈 `common/` 승격.
