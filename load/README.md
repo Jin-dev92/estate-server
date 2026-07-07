@@ -37,6 +37,17 @@ open(arrival-rate) 모델이라 closed(VU)와 띄우는 법이 다르다. 로컬
 - **spike (방어·회복 보기):** rate limit을 **정상/유한 한도**로 띄운다(상향 X). window를 짧게 두면 회복을 빨리 본다.
   `RATE_LIMIT_WINDOW_SEC=10 RATE_LIMIT_USER_MAX=200 RATE_LIMIT_IP_MAX=200 node dist/main.js`
 
+## 회복탄력성 하네스 (M12 — k6 아님)
+
+회복탄력성 계층(카카오 OAuth의 재시도·서킷·벌크헤드·타임아웃)은 k6가 아니라 별도 ts-node 하네스로 잰다. 이유: 이 계층은 카카오가 오작동할 때만 작동하는데, 실제 카카오엔 부하·장애를 줄 수 없다. 그래서 실제 클라이언트 경로를 구동하되 `global.fetch`에 가짜 카카오(지연·에러)를 주입한다. 앱·Docker 불필요.
+
+```bash
+npx ts-node load/resilience/harness.ts
+# 환경변수: HARNESS_CONCURRENCY(기본 20)·HARNESS_DURATION_MS(2500)·HARNESS_THINK_MS(120)
+```
+
+상세·결론: [`load/results/m12-resilience.md`](results/m12-resilience.md).
+
 ## 결과 기록
 > 환경: 로컬 단일 머신(앱+PG+Redis+Kafka 동시 구동) — 절대치가 아니라 **상대 비교·회귀 감지**용.
 
@@ -50,6 +61,7 @@ open(arrival-rate) 모델이라 closed(VU)와 띄우는 법이 다르다. 로컬
 | 2026-06-17 | stress-create (POST, 풀=1) | ramping 10→600 RPS, 40s 유지 | 1734 | 95.1 | 0.23% | throughput 상한 ~95 RPS, P2024 풀 타임아웃 35건(병목=DB 커넥션 풀), dropped 812 |
 | 2026-06-17 | spike-ratelimit (POST) | 5→300→5 RPS (window 10s, 한도 200) | 10.0 | — | 84.4%* | 429 차단 4032·통과 743·5xx 0(앱 생존), 윈도우 리셋 후 201 회복. *429 포함 실패율(정상 방어) |
 | 2026-07-04 | read-posts 좋아요 집계 (M11, before→after) | load 20VU, 글 50×좋아요 0/200/2000 | before 10.61/19.53/73.46 → after 12.20/12.39/13.27 | 15.8~16.0 | 0% | 라이브 COUNT → Redis 카운터 전환. 상세: [`load/results/m11-like-counter.md`](results/m11-like-counter.md) |
+| 2026-07-07 | 회복탄력성 카카오 OAuth (M12, 하네스) | conc 20, think 120ms, 시나리오별 | 정상 407 · 느림(default) p95 14864 · 장애 503평균 8 | — | — | k6 아님 — ts-node 하네스로 정책 계층 실측(가짜 카카오 장애주입). 정상 오탐 0·장애 fail-fast 확인, 느림 retry 스택 꼬리지연 발견. 상세: [`load/results/m12-resilience.md`](results/m12-resilience.md) |
 
 ### 읽어둘 발견
 - **login은 데코레이터 rate limit 때문에 부하 측정이 막힌다.** `@RateLimit({ipMax:10})`은 라우트에 하드코딩이라 `RATE_LIMIT_*` env 상향으로 안 풀린다 → load에서 ~99% 429. **순수 bcrypt baseline은 smoke(윈도우당 ≤10회)로** 잰다. (이건 보안이 의도대로 동작한다는 증거이기도 하다.)
