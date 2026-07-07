@@ -131,6 +131,26 @@ describe('KakaoOAuthClient', () => {
     });
   });
 
+  describe('네트워크 오류(TypeError) — 503 매핑', () => {
+    it('토큰 교환 fetch가 TypeError로 거부되면 재시도 없이 503', async () => {
+      expect.assertions(3);
+      // fetch가 던지는 네트워크 오류(연결 거부·DNS 등)는 TypeError다.
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockRejectedValueOnce(new TypeError('network down'));
+
+      try {
+        await makeClient().exchangeAndFetch('code', 'cb');
+      } catch (err) {
+        expect(err).toBeInstanceOf(AppException);
+        expect((err as AppException).code).toBe(KAKAO_UNAVAILABLE_CODE);
+      }
+
+      // 토큰 교환은 재시도가 없으므로 fetch는 1회.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('서킷 브레이커', () => {
     it('연속 실패 임계 도달 후 호출은 fetch 없이 즉시 503', async () => {
       expect.assertions(4);
