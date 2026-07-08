@@ -40,6 +40,7 @@ SIGTERM/SIGINT (1회만 수신 — 중복 신호는 무시)
       · Redis quit, Prisma disconnect, pub/sub duplicate 정리
   3-a. 정상 완료 → 워치독 해제 → exit 0
   3-b. 워치독 발화 → "드레인 예산 초과" 로그 + Sentry capture → exit 1
+       (Sentry는 짧은 flush(2s) 후 exit — flush 실패 시에도 exit은 보장, 로그가 1차 채널)
 ```
 
 핵심 순서 원칙: **수도꼭지를 먼저 잠그고(신규 유입 중단) → 배수를 기다린 뒤(in-flight 완주) → 파이프를 해체한다(커넥션 정리)**. 역순이면 하던 일이 잃을 자원을 먼저 끊게 된다.

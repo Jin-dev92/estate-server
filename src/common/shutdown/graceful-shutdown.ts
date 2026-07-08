@@ -1,6 +1,12 @@
 import { Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 
+// process.exit()은 대기 중인 네트워크 I/O(Sentry 이벤트 전송 등)를 기다리지
+// 않는다. Sentry.captureMessage/captureException 직후 바로 exit하면 캡처된
+// 이벤트가 전송되기 전에 프로세스가 죽어 유실될 수 있으므로, 짧게 flush를
+// 기다린 뒤 exit한다(전체 종료 예산에 비하면 무시할 수준의 지연).
+const SENTRY_FLUSH_MS = 2000;
+
 // app.close()만 필요하므로 최소 계약으로 받는다(테스트 용이 + main/워커 공용).
 export interface ClosableApp {
   close(): Promise<void>;
@@ -26,6 +32,16 @@ export function createShutdownRunner(
   const exit = opts.exit ?? ((code: number) => process.exit(code));
   let started = false;
 
+  // Sentry 캡처 후 exit하는 두 경로(워치독·close 실패)가 공유하는 헬퍼.
+  // Promise.resolve(...)로 감싸는 이유: jest.mock('@sentry/nestjs') 자동
+  // 모킹 시 Sentry.flush가 undefined를 반환해도 안전하게 처리하기 위함.
+  // Sentry 비활성(DSN 없음)에서는 flush가 즉시 resolve되어 지연이 없다.
+  const flushThenExit = (code: number): void => {
+    void Promise.resolve(Sentry.flush(SENTRY_FLUSH_MS))
+      .catch(() => undefined)
+      .then(() => exit(code));
+  };
+
   return async () => {
     if (started) return; // 중복 신호(SIGTERM 후 SIGINT 등) 무시
     started = true;
@@ -37,7 +53,7 @@ export function createShutdownRunner(
         `${opts.name} graceful shutdown timeout`,
         'warning',
       );
-      exit(1);
+      flushThenExit(1);
     }, opts.timeoutMs);
 
     try {
@@ -45,12 +61,12 @@ export function createShutdownRunner(
       await app.close(); // 기존 OnModuleDestroy(Redis quit·Prisma disconnect 등) 재사용
       clearTimeout(watchdog);
       logger.log('종료 완료');
-      exit(0);
+      exit(0); // 성공 경로는 캡처가 없으므로 flush 없이 즉시 exit
     } catch (err) {
       clearTimeout(watchdog);
       logger.error(`종료 중 오류: ${(err as Error).message}`);
       Sentry.captureException(err);
-      exit(1);
+      flushThenExit(1);
     }
   };
 }

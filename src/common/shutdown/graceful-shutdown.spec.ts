@@ -65,6 +65,9 @@ describe('createShutdownRunner', () => {
       });
 
       await runner();
+      // exit는 이제 Sentry.flush 뒤(마이크로태스크)에 호출되므로 흘려보낸다.
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(Sentry.captureException).toHaveBeenCalledWith(boom);
       expect(exit).toHaveBeenCalledWith(1);
@@ -83,7 +86,7 @@ describe('createShutdownRunner', () => {
       });
 
       const running = runner();
-      jest.advanceTimersByTime(TIMEOUT_MS);
+      await jest.advanceTimersByTimeAsync(TIMEOUT_MS);
 
       expect(exit).toHaveBeenCalledWith(1);
       expect(Sentry.captureMessage).toHaveBeenCalledWith(
@@ -91,6 +94,29 @@ describe('createShutdownRunner', () => {
         'warning',
       );
       void running; // 러너 자체는 매달린 채(실제로는 exit가 프로세스를 끝냄)
+    });
+
+    it('워치독 발화 시 Sentry.flush가 exit보다 먼저 호출된다', async () => {
+      jest.useFakeTimers();
+      const app = { close: jest.fn(async () => undefined) };
+      const exit = jest.fn();
+      const runner = createShutdownRunner(app, {
+        name: 'test',
+        timeoutMs: TIMEOUT_MS,
+        drain: () => new Promise<void>(() => undefined),
+        exit,
+      });
+
+      const running = runner();
+      await jest.advanceTimersByTimeAsync(TIMEOUT_MS);
+
+      expect(Sentry.flush).toHaveBeenCalledWith(2000);
+      // invocationCallOrder로 flush가 exit보다 먼저 호출됐음을 확인한다.
+      const flushOrder = (Sentry.flush as jest.Mock).mock
+        .invocationCallOrder[0];
+      const exitOrder = exit.mock.invocationCallOrder[0];
+      expect(flushOrder).toBeLessThan(exitOrder);
+      void running;
     });
   });
 });
