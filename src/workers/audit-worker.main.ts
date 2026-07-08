@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/nestjs';
 import { ConfigKey } from '../config/config-keys';
 import { KafkaTopicInitializer } from '../events/kafka-topic-initializer';
 import { initSentry } from '../common/sentry/init-sentry';
+import { setupGracefulShutdown } from '../common/shutdown/graceful-shutdown';
 import { AuditWorkerModule } from './audit-worker.module';
 
 // chat·board·membership 전체를 독립 consumer group으로 소비한다(감사).
@@ -24,7 +25,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AuditWorkerModule);
   const config = app.get(ConfigService);
   await app.get(KafkaTopicInitializer).ensureTopics();
-  app.connectMicroservice<MicroserviceOptions>({
+  const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,
     options: {
       client: {
@@ -34,6 +35,20 @@ async function bootstrap() {
     },
   });
   await app.startAllMicroservices();
+
+  // 그레이스풀 셧다운(M13): 컨슈머를 먼저 닫는다 — in-flight 핸들러 완주 →
+  // 오프셋 커밋 → LeaveGroup(브로커가 즉시 리밸런스, session timeout 대기 없음).
+  // 이후 app.close()가 인프라(Prisma·Redis)를 정리한다. app.close()가 microservice를
+  // 한 번 더 닫지만 Nest Kafka 서버는 null 가드가 있어 이중 close는 안전하다.
+  const shutdownTimeoutMs =
+    Number(process.env[ConfigKey.ShutdownTimeoutMs]) || 10_000;
+  setupGracefulShutdown(app, {
+    name: 'audit-worker',
+    timeoutMs: shutdownTimeoutMs,
+    drain: async () => {
+      await microservice.close();
+    },
+  });
   // listen() 호출하지 않음 → HTTP 포트 미바인딩(컨슈머 전용 프로세스)
 }
 void bootstrap();
