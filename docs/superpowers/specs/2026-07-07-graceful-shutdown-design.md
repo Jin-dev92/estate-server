@@ -22,7 +22,7 @@ M13은 5개 프로세스 모두에 그레이스풀 셧다운을 구현하고, **
 |---|---|---|
 | 적용 범위 | 5개 프로세스 전부 | 패턴이 공유돼 증분 비용이 낮고, "프로세스별 죽는 방법"으로 스토리 완성 |
 | 합격 기준 | **in-flight 유실 0** (단일 인스턴스) | 받아둔 요청은 전부 정상 완료 + 데이터 유실 0. 공백 중 신규 요청의 connection refused는 **서버 1대의 물리적 한계로 정직하게 별도 집계·문서화**(해소는 멀티 인스턴스 마일스톤에서 — 롤링 배포 + LB 필요) |
-| 구현 접근 | **Nest 라이프사이클 훅 + 수동 보강 2가지** | `enableShutdownHooks()`로 SIGTERM→`app.close()` 연결, 관심사별 훅(`beforeApplicationShutdown` 드레인 → `onModuleDestroy` 인프라 정리) 순서는 프레임워크가 보장. 수동 보강은 Nest에 없는 것만: ①강제종료 워치독 ②keep-alive 유휴 소켓 정리(Node 18+ 내장 API). 라이브러리 추가 0(YAGNI — lightship/http-terminator는 내장 API로 대체 가능) |
+| 구현 접근 | **자체 시그널 핸들러 + 기존 Nest 훅 재사용** | 자체 시그널 핸들러(`setupGracefulShutdown`)가 SIGTERM→drain→app.close()를 지휘(워치독·드레인 순서 제어를 위해 enableShutdownHooks 대신 사용 — Nest 훅 순서가 onModuleDestroy→beforeApplicationShutdown이라 드레인을 훅에 두면 인프라가 먼저 닫힌다). 기존 OnModuleDestroy 정리는 app.close()를 통해 그대로 재사용 |
 | 종료 예산 | `SHUTDOWN_TIMEOUT_MS` (ConfigKey, 기본 10000) | 드레인이 예산 내에 안 끝나면 로그+Sentry 후 exit 1(강제 종료). 조용히 매달린 채 죽지 않는 프로세스 금지 — M12 "조용히 실패하는 서킷 금지"와 같은 원칙 |
 
 ## 3. 종료 시퀀스 (공통 골격)
@@ -30,15 +30,14 @@ M13은 5개 프로세스 모두에 그레이스풀 셧다운을 구현하고, **
 ```
 SIGTERM/SIGINT (1회만 수신 — 중복 신호는 무시)
   1. 워치독 시작 (SHUTDOWN_TIMEOUT_MS)
-  2. app.close() 호출
-     2a. beforeApplicationShutdown 훅 — "새 일 받기 중단 + 하던 일 완주"
-         · main: HTTP server.close()(신규 수신 중단) + closeIdleConnections()
-                 (유휴 keep-alive 정리 — 없으면 close가 영원히 안 끝남),
-                 socket.io close(클라이언트 정상 disconnect → 재연결 루프 진입)
-         · 워커: Nest Kafka transport close → 오프셋 커밋 + 컨슈머 그룹 graceful leave
-         · relay: 인터벌 해제 + 진행 중 틱 완주 대기
-     2b. onModuleDestroy 훅(기존 코드 재사용) — 인프라 정리
-         · Redis quit, Prisma disconnect, pub/sub duplicate 정리
+  2a. drain() — app.close() 이전에 오케스트레이터가 직접 실행
+      · main: HTTP server.close()(신규 수신 중단) + closeIdleConnections()
+              (유휴 keep-alive 정리 — 없으면 close가 영원히 안 끝남),
+              socket.io close(클라이언트 정상 disconnect → 재연결 루프 진입)
+      · 워커: Nest Kafka transport close → 오프셋 커밋 + 컨슈머 그룹 graceful leave
+      · relay: 인터벌 해제 + 진행 중 틱 완주 대기
+  2b. app.close() → onModuleDestroy 훅(기존 코드 재사용) — 인프라 정리
+      · Redis quit, Prisma disconnect, pub/sub duplicate 정리
   3-a. 정상 완료 → 워치독 해제 → exit 0
   3-b. 워치독 발화 → "드레인 예산 초과" 로그 + Sentry capture → exit 1
 ```
@@ -50,7 +49,7 @@ SIGTERM/SIGINT (1회만 수신 — 중복 신호는 무시)
 | 파일 | 역할 |
 |---|---|
 | `src/common/shutdown/graceful-shutdown.ts` (신규) | `setupGracefulShutdown(app, { name, timeoutMs })` — 시그널 1회 수신·워치독·app.close() 오케스트레이션·exit code 결정. **5개 부트스트랩이 공유**하는 유일한 공용 코드 |
-| `src/common/shutdown/http-drain.service.ts` (신규) | main 전용. `beforeApplicationShutdown`에서 HTTP `server.close()` + `closeIdleConnections()` + (예산 임박 시) `closeAllConnections()`. socket.io 서버 close 포함 |
+| `src/common/shutdown/http-drain.ts` (신규) | main 전용. 평범한 헬퍼 함수 — HTTP `server.close()` + `closeIdleConnections()` + (예산 임박 시) `closeAllConnections()`. socket.io 서버 close 포함 |
 | `src/main.ts` (수정) | `enableShutdownHooks()` + `setupGracefulShutdown()` 배선 |
 | `src/workers/*.main.ts` 4종 (수정) | 동일 배선. 컨슈머 3종은 `app.close()`가 Kafka graceful leave를 수행(추가 코드 최소) |
 | `src/workers/outbox-relay.main.ts` + relay 루프 (리팩터) | `setInterval` 루프를 `start()/stop()` 가능한 서비스로 추출 — `stop()`은 인터벌 해제 후 **진행 중 틱의 Promise를 await**(발행↔마킹 사이 종료 창 제거) |
