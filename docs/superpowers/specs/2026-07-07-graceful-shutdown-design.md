@@ -39,7 +39,7 @@ SIGTERM/SIGINT (1회만 수신 — 중복 신호는 무시)
   2b. app.close() → onModuleDestroy 훅(기존 코드 재사용) — 인프라 정리
       · Redis quit, Prisma disconnect, pub/sub duplicate 정리
   3-a. 정상 완료 → 워치독 해제 → exit 0
-  3-b. 워치독 발화 → "드레인 예산 초과" 로그 + Sentry capture → exit 1
+  3-b. 워치독 발화 → "드레인 예산 초과" 로그 + Sentry capture → exit 1 — 발화 이후 뒤늦게 드레인이 성공해도 exit 0으로 뒤집지 않는다(예산 초과 사실이 종료 코드에 보존)
        (Sentry는 짧은 flush(2s) 후 exit — flush 실패 시에도 exit은 보장, 로그가 1차 채널)
 ```
 
