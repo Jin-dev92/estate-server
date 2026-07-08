@@ -48,6 +48,10 @@ npx ts-node load/resilience/harness.ts
 
 상세·결론: [`load/results/m12-resilience.md`](results/m12-resilience.md).
 
+## 그레이스풀 셧다운 실험 (M13 — k6 + 결정적 프로브)
+
+부하 중 재시작의 before(SIGKILL=하드킬 재현)/after(SIGTERM) 비교. 쓰기 라우트는 M6 캡(데코레이터 하드코딩)이라 k6 부하는 GET으로 하고, in-flight 증명은 느린 비멱등 요청(login·bcrypt ~114ms) 10발 동시 발사 후 30ms 뒤 신호를 주는 프로브로, relay 중복 발행은 SQL로 PENDING 500행을 적립한 대형 단일 배치 중간에 신호를 줘 결정적으로 측정했다(타이밍 운 제거). 절차·수치·한계: [`load/results/m13-graceful-shutdown.md`](results/m13-graceful-shutdown.md).
+
 ## 결과 기록
 > 환경: 로컬 단일 머신(앱+PG+Redis+Kafka 동시 구동) — 절대치가 아니라 **상대 비교·회귀 감지**용.
 
@@ -62,6 +66,7 @@ npx ts-node load/resilience/harness.ts
 | 2026-06-17 | spike-ratelimit (POST) | 5→300→5 RPS (window 10s, 한도 200) | 10.0 | — | 84.4%* | 429 차단 4032·통과 743·5xx 0(앱 생존), 윈도우 리셋 후 201 회복. *429 포함 실패율(정상 방어) |
 | 2026-07-04 | read-posts 좋아요 집계 (M11, before→after) | load 20VU, 글 50×좋아요 0/200/2000 | before 10.61/19.53/73.46 → after 12.20/12.39/13.27 | 15.8~16.0 | 0% | 라이브 COUNT → Redis 카운터 전환. 상세: [`load/results/m11-like-counter.md`](results/m11-like-counter.md) |
 | 2026-07-07 | 회복탄력성 카카오 OAuth (M12, 하네스) | conc 20, think 120ms, 시나리오별 | 정상 407 · 느림(default) p95 14864 · 장애 503평균 8 | — | — | k6 아님 — ts-node 하네스로 정책 계층 실측(가짜 카카오 장애주입). 정상 오탐 0·장애 fail-fast 확인, 느림 retry 스택 꼬리지연 발견. 상세: [`load/results/m12-resilience.md`](results/m12-resilience.md) |
+| 2026-07-08 | 그레이스풀 셧다운 재시작 (M13, before/after) | GET 10VU·90s 중 kill + 결정적 프로브 | in-flight 절단 10/10→0/10 · 컨슈머 재조인 31s→6s · relay 중복 473→0 | — | — | before=SIGKILL vs after=SIGTERM 통제 실험. 상세: [`load/results/m13-graceful-shutdown.md`](results/m13-graceful-shutdown.md) |
 
 ### 읽어둘 발견
 - **login은 데코레이터 rate limit 때문에 부하 측정이 막힌다.** `@RateLimit({ipMax:10})`은 라우트에 하드코딩이라 `RATE_LIMIT_*` env 상향으로 안 풀린다 → load에서 ~99% 429. **순수 bcrypt baseline은 smoke(윈도우당 ≤10회)로** 잰다. (이건 보안이 의도대로 동작한다는 증거이기도 하다.)
