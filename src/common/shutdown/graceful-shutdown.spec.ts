@@ -118,5 +118,43 @@ describe('createShutdownRunner', () => {
       expect(flushOrder).toBeLessThan(exitOrder);
       void running;
     });
+
+    it('워치독 발화 후 drain이 뒤늦게 성공해도 exit 0으로 뒤집히지 않는다', async () => {
+      jest.useFakeTimers();
+      const app = { close: jest.fn(async () => undefined) };
+      const exit = jest.fn();
+      // drain을 수동으로 resolve 가능한 deferred로 만든다 — 워치독 발화 "이후"
+      // 시점에 성공 경로가 뒤늦게 도착하는 경합을 재현하기 위함.
+      let resolveDrain!: () => void;
+      const drain = jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveDrain = resolve;
+          }),
+      );
+
+      const runner = createShutdownRunner(app, {
+        name: 'test',
+        timeoutMs: TIMEOUT_MS,
+        drain,
+        exit,
+      });
+
+      const running = runner();
+      // 워치독 발화 → timedOut = true, flushThenExit(1) 예약(마이크로태스크 대기 중).
+      await jest.advanceTimersByTimeAsync(TIMEOUT_MS);
+
+      // 워치독 발화 "이후"에 drain이 뒤늦게 성공 → app.close()까지 이어짐.
+      resolveDrain();
+      // 마이크로태스크(성공 경로의 await 체인 + flushThenExit의 flush.then)를 모두 소진.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(exit).toHaveBeenCalledTimes(1);
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(exit).not.toHaveBeenCalledWith(0);
+      void running;
+    });
   });
 });

@@ -31,6 +31,10 @@ export function createShutdownRunner(
   const logger = new Logger(`GracefulShutdown:${opts.name}`);
   const exit = opts.exit ?? ((code: number) => process.exit(code));
   let started = false;
+  // 워치독이 이미 발화(exit 1 예약)했는지 표시하는 플래그. 워치독 발화 후에도
+  // try 블록의 drain/close가 뒤늦게 성공할 수 있어(2초 flush 대기 창 안에서),
+  // 이 경합에서 성공 경로가 종료 코드를 0으로 뒤집지 않도록 가드한다.
+  let timedOut = false;
 
   // Sentry 캡처 후 exit하는 두 경로(워치독·close 실패)가 공유하는 헬퍼.
   // Promise.resolve(...)로 감싸는 이유: jest.mock('@sentry/nestjs') 자동
@@ -48,6 +52,7 @@ export function createShutdownRunner(
     logger.log(`종료 시작(예산 ${opts.timeoutMs}ms)`);
 
     const watchdog = setTimeout(() => {
+      timedOut = true;
       logger.error('종료 예산 초과 — 강제 종료');
       Sentry.captureMessage(
         `${opts.name} graceful shutdown timeout`,
@@ -61,10 +66,15 @@ export function createShutdownRunner(
       await app.close(); // 기존 OnModuleDestroy(Redis quit·Prisma disconnect 등) 재사용
       clearTimeout(watchdog);
       logger.log('종료 완료');
+      // 워치독이 이미 발화해 flush 후 exit(1)이 예약된 상태 — 뒤늦은 성공이
+      // 종료 코드를 0으로 뒤집으면 "예산 초과 = exit 1" 계약이 깨진다.
+      if (timedOut) return;
       exit(0); // 성공 경로는 캡처가 없으므로 flush 없이 즉시 exit
     } catch (err) {
       clearTimeout(watchdog);
       logger.error(`종료 중 오류: ${(err as Error).message}`);
+      // 워치독의 exit(1)이 이미 예약됨 — 중복 캡처/flush/exit 방지.
+      if (timedOut) return;
       Sentry.captureException(err);
       flushThenExit(1);
     }
