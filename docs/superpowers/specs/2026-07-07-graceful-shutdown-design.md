@@ -50,7 +50,7 @@ SIGTERM/SIGINT (1회만 수신 — 중복 신호는 무시)
 |---|---|
 | `src/common/shutdown/graceful-shutdown.ts` (신규) | `setupGracefulShutdown(app, { name, timeoutMs })` — 시그널 1회 수신·워치독·app.close() 오케스트레이션·exit code 결정. **5개 부트스트랩이 공유**하는 유일한 공용 코드 |
 | `src/common/shutdown/http-drain.ts` (신규) | main 전용. 평범한 헬퍼 함수 — HTTP `server.close()` + `closeIdleConnections()` + (예산 임박 시) `closeAllConnections()`. socket.io 서버 close 포함 |
-| `src/main.ts` (수정) | `enableShutdownHooks()` + `setupGracefulShutdown()` 배선 |
+| `src/main.ts` (수정) | `setupGracefulShutdown()` 배선(`enableShutdownHooks()` 미사용 — §2 참고) |
 | `src/workers/*.main.ts` 4종 (수정) | 동일 배선. 컨슈머 3종은 `app.close()`가 Kafka graceful leave를 수행(추가 코드 최소) |
 | `src/workers/outbox-relay.main.ts` + relay 루프 (리팩터) | `setInterval` 루프를 `start()/stop()` 가능한 서비스로 추출 — `stop()`은 인터벌 해제 후 **진행 중 틱의 Promise를 await**(발행↔마킹 사이 종료 창 제거) |
 | `src/config/config-keys.ts`·`.env.example` (수정) | `ShutdownTimeoutMs = 'SHUTDOWN_TIMEOUT_MS'` (기본 10000) |
@@ -76,7 +76,7 @@ M8·M11과 같은 통제 실험 형식. 변수는 "그레이스풀 구현 유무
 
 - `graceful-shutdown.spec.ts`: 시그널 1회만 처리(중복 무시) / app.close 정상 완료 시 exit 0 경로 / 워치독 발화 시 exit 1 경로(가짜 타이머·process.exit mock) / close 예외 시에도 워치독이 정리.
 - relay 루프 서비스 spec: `stop()`이 진행 중 틱을 완주 대기하는지(지연 틱 fake) / stop 후 새 틱이 돌지 않는지.
-- http-drain spec: `beforeApplicationShutdown`에서 server.close·closeIdleConnections 호출 배선(서버 mock).
+- http-drain spec: `drainHttpServer` 헬퍼가 server.close·closeIdleConnections를 호출하고 강제 정리 타이머를 관리하는 배선(서버 mock).
 - 기존 `OnModuleDestroy` 정리 코드는 이미 spec 존재 — 재사용 확인만.
 
 ## 8. 범위 밖 (후속)
