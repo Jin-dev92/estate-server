@@ -26,6 +26,7 @@ k6 GET 부하(smoke 10VU·90s) 중 t=45s에 신호 → 3s 후 재기동. 신호 
 | 데이터(Post·Outbox) | 변화 없음(읽기 부하) | 변화 없음 |
 
 - **핵심 대비는 프로브다: 처리 중이던 요청이 하드킬에선 10/10 끊기고, 그레이스풀에선 10/10 응답까지 완주한다.** `server.close()`가 신규 수신만 막고 in-flight를 기다린 뒤 종료함이 결정적으로 확인됐다.
+- *지표 매핑(브리프 대비):* 원안의 "k6 201 수 == DB Post 행 수"와 "Outbox 전량 PUBLISHED" 지표는 GET 대체(위 §측정을 가로막은 것들 1·2)로 **시나리오 A에서는 미해당**이 됐다 — 쓰기·발행 정합은 시나리오 C가 대신 검증한다(SQL 적립 500행이 각 케이스에서 잔량 없이 전량 PUBLISHED로 소진됨을 `wait_pending_zero`로 확인, 수신 500/500).
 - k6 실패(refused)는 두 케이스 모두 "공백 중 신규 요청"이며, 공백 폭은 셧다운 방식이 아니라 **재기동 부팅 비용이 지배**한다(관측: Kafka 토픽 초기화·연결에 ~26s까지 소요, 실행별 변동 큼 — before 284 vs after 50 차이도 부팅 변동이지 셧다운 효과가 아니다). 이 공백은 단일 인스턴스의 물리적 한계로, 해소는 멀티 인스턴스+LB(후속 마일스톤) 몫이다.
 
 ## 시나리오 B — 컨슈머 교체: 재조인 공백
@@ -61,9 +62,11 @@ PENDING 500행(단일 틱·단일 트랜잭션 배치) 처리 도중(틱 시작 
 
 ## 재현 방법 (요약)
 
+> 타이밍 파라미터는 계획 원안(30s 시점·VUS 20)과 다르다 — 통제 용이성을 위해 smoke 프로파일(10VU·90s·45s 시점)로 조정(방법 적응 §참조).
+
 ```bash
 docker compose up -d && pnpm build && pnpm load:seed
-# A: k6 GET 부하 중 45s 시점 kill(-9|-TERM) + login 10발 동시 프로브(30ms 뒤 신호)
+# A: k6 GET 부하(smoke 10VU·90s) 중 45s 시점 kill(-9|-TERM) + login 10발 동시 프로브(30ms 뒤 신호)
 # B: audit-worker 조인 → kill → 즉시 새 워커 기동 → 'joined the group' 로그까지 시간
 # C: SQL로 PENDING 500행 적립 + OUTBOX_BATCH_SIZE=500 → 틱 시작 0.7s 뒤 kill →
 #    잔여 소진 후 kafka-console-consumer --from-beginning으로 eventId 중복 집계
