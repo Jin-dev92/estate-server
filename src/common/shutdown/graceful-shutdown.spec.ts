@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/require-await */
+import { Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { createShutdownRunner } from './graceful-shutdown';
+import {
+  createShutdownRunner,
+  getShutdownTimeoutMs,
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  FORCE_CLOSE_MARGIN_MS,
+} from './graceful-shutdown';
 
 // 워치독·종료 코드는 Sentry로 알린다 — 코드베이스 관례대로 모듈 자동 모킹.
 jest.mock('@sentry/nestjs');
@@ -155,6 +161,63 @@ describe('createShutdownRunner', () => {
       expect(exit).toHaveBeenCalledWith(1);
       expect(exit).not.toHaveBeenCalledWith(0);
       void running;
+    });
+  });
+});
+
+describe('getShutdownTimeoutMs', () => {
+  const KEY = 'SHUTDOWN_TIMEOUT_MS';
+  const original = process.env[KEY];
+
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY];
+    else process.env[KEY] = original;
+    jest.restoreAllMocks();
+  });
+
+  describe('파싱', () => {
+    it('env 값을 숫자로 반환한다', () => {
+      process.env[KEY] = '15000';
+
+      expect(getShutdownTimeoutMs()).toBe(15_000);
+    });
+
+    it('미설정·0·비숫자는 기본값으로 폴백한다', () => {
+      delete process.env[KEY];
+      expect(getShutdownTimeoutMs()).toBe(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+
+      process.env[KEY] = 'abc';
+      expect(getShutdownTimeoutMs()).toBe(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+
+      process.env[KEY] = '0';
+      expect(getShutdownTimeoutMs()).toBe(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+    });
+  });
+
+  describe('하한 가드', () => {
+    it('강제 정리 여유 이하면 경고를 남긴다(값은 그대로 반환)', () => {
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      process.env[KEY] = String(FORCE_CLOSE_MARGIN_MS);
+
+      const result = getShutdownTimeoutMs();
+
+      expect(result).toBe(FORCE_CLOSE_MARGIN_MS);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('SHUTDOWN_TIMEOUT_MS'),
+      );
+    });
+
+    it('충분히 크면 경고하지 않는다', () => {
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      process.env[KEY] = '10000';
+
+      getShutdownTimeoutMs();
+
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 });

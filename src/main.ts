@@ -6,7 +6,11 @@ import { KafkaTopicInitializer } from './events/kafka-topic-initializer';
 import { setupSwagger } from './common/swagger/setup-swagger';
 import { initSentry } from './common/sentry/init-sentry';
 import { ConfigKey } from './config/config-keys';
-import { setupGracefulShutdown } from './common/shutdown/graceful-shutdown';
+import {
+  setupGracefulShutdown,
+  getShutdownTimeoutMs,
+  FORCE_CLOSE_MARGIN_MS,
+} from './common/shutdown/graceful-shutdown';
 import { drainHttpServer } from './common/shutdown/http-drain';
 import { ChatGateway } from './chat/interface/chat.gateway';
 import { NotificationGateway } from './notification/interface/notification.gateway';
@@ -38,8 +42,7 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 
   // 그레이스풀 셧다운(M13): SIGTERM → WS 정상 disconnect + HTTP 드레인 → 인프라 정리.
-  const shutdownTimeoutMs =
-    Number(process.env[ConfigKey.ShutdownTimeoutMs]) || 10_000;
+  const shutdownTimeoutMs = getShutdownTimeoutMs();
   const httpServer = app.getHttpServer() as Server;
   setupGracefulShutdown(app, {
     name: 'main',
@@ -50,8 +53,11 @@ async function bootstrap() {
       // 채팅 메시지 영속은 Kafka 경로(persistence-worker)라 유실 없음.
       app.get(ChatGateway).server?.disconnectSockets(true);
       app.get(NotificationGateway).server?.disconnectSockets(true);
-      // 예산 만료 1초 전까지 in-flight 완주를 기다리고, 이후 잔여 연결 강제 정리.
-      await drainHttpServer(httpServer, shutdownTimeoutMs - 1_000);
+      // 예산 만료 FORCE_CLOSE_MARGIN_MS 전까지 in-flight 완주를 기다리고, 이후 잔여 연결 강제 정리.
+      await drainHttpServer(
+        httpServer,
+        shutdownTimeoutMs - FORCE_CLOSE_MARGIN_MS,
+      );
     },
   });
 }

@@ -5,7 +5,10 @@ import * as Sentry from '@sentry/nestjs';
 import { ConfigKey } from '../config/config-keys';
 import { KafkaTopicInitializer } from '../events/kafka-topic-initializer';
 import { initSentry } from '../common/sentry/init-sentry';
-import { setupGracefulShutdown } from '../common/shutdown/graceful-shutdown';
+import {
+  setupGracefulShutdown,
+  getShutdownTimeoutMs,
+} from '../common/shutdown/graceful-shutdown';
 import { NotificationWorkerModule } from '../notification/notification-worker.module';
 
 // chat·board 이벤트를 독립 consumer group으로 소비한다(알림 생성·푸시).
@@ -39,9 +42,10 @@ async function bootstrap() {
   // 그레이스풀 셧다운(M13): 컨슈머를 먼저 닫는다 — in-flight 핸들러 완주 →
   // 오프셋 커밋 → LeaveGroup(브로커가 즉시 리밸런스, session timeout 대기 없음).
   // 이후 app.close()가 인프라(Prisma·Redis)를 정리한다. app.close()가 microservice를
-  // 한 번 더 닫지만 Nest Kafka 서버는 null 가드가 있어 이중 close는 안전하다.
-  const shutdownTimeoutMs =
-    Number(process.env[ConfigKey.ShutdownTimeoutMs]) || 10_000;
+  // 한 번 더 닫지만 Nest Kafka 서버는 null 가드가 있어 이중 close는 안전하다
+  // (검증 버전 @nestjs/microservices@11.1.26 — server-kafka.js close()의 consumer/producer
+  //  null 가드에 의존. 버전업 시 이 가정이 깨지면 배포마다 exit 1로 눈에 띄게 실패한다).
+  const shutdownTimeoutMs = getShutdownTimeoutMs();
   setupGracefulShutdown(app, {
     name: 'notification-worker',
     timeoutMs: shutdownTimeoutMs,

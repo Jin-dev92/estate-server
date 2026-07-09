@@ -1,11 +1,34 @@
 import { Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
+import { ConfigKey } from '../../config/config-keys';
 
 // process.exit()은 대기 중인 네트워크 I/O(Sentry 이벤트 전송 등)를 기다리지
 // 않는다. Sentry.captureMessage/captureException 직후 바로 exit하면 캡처된
 // 이벤트가 전송되기 전에 프로세스가 죽어 유실될 수 있으므로, 짧게 flush를
 // 기다린 뒤 exit한다(전체 종료 예산에 비하면 무시할 수준의 지연).
 const SENTRY_FLUSH_MS = 2000;
+
+// 종료 예산 기본값(env 미설정 시). 5개 부트스트랩의 단일 출처.
+export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+// HTTP 강제 커넥션 정리 여유: 종료 예산 만료 이 시간 전에 잔여 연결을 강제로 닫는다.
+export const FORCE_CLOSE_MARGIN_MS = 1_000;
+
+// SHUTDOWN_TIMEOUT_MS(env)를 파싱한다. 미설정·0·비숫자는 기본값으로 폴백한다.
+// 5개 부트스트랩에 복붙되던 `Number(process.env[...]) || 10_000` 을 단일 출처로 모은다.
+// 예산이 강제 정리 여유 이하이면 in-flight 드레인 유예가 사실상 사라지므로 경고한다
+// (운영자가 의도적으로 짧게 둘 수 있어 clamp/throw는 하지 않고 알림만 — 조용히 넘기지 않기).
+export function getShutdownTimeoutMs(): number {
+  const timeoutMs =
+    Number(process.env[ConfigKey.ShutdownTimeoutMs]) ||
+    DEFAULT_SHUTDOWN_TIMEOUT_MS;
+  if (timeoutMs <= FORCE_CLOSE_MARGIN_MS) {
+    new Logger('GracefulShutdown').warn(
+      `SHUTDOWN_TIMEOUT_MS(${timeoutMs}ms)가 강제 정리 여유(${FORCE_CLOSE_MARGIN_MS}ms) 이하 — ` +
+        `in-flight 드레인 유예가 사실상 없습니다. 예산을 늘리는 것을 권장합니다.`,
+    );
+  }
+  return timeoutMs;
+}
 
 // app.close()만 필요하므로 최소 계약으로 받는다(테스트 용이 + main/워커 공용).
 export interface ClosableApp {

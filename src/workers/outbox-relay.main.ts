@@ -7,7 +7,10 @@ import { OutboxModule } from '../outbox/outbox.module';
 import { RelayOutboxUseCase } from '../outbox/application/relay-outbox.use-case';
 import { initSentry } from '../common/sentry/init-sentry';
 import { RelayLoop } from './relay-loop';
-import { setupGracefulShutdown } from '../common/shutdown/graceful-shutdown';
+import {
+  setupGracefulShutdown,
+  getShutdownTimeoutMs,
+} from '../common/shutdown/graceful-shutdown';
 
 // outbox-relay: PENDING outbox를 주기 폴링해 Kafka로 발행한다(별도 프로세스).
 // HTTP/consumer 없는 순수 백그라운드 워커라 application context만 띄운다.
@@ -36,8 +39,7 @@ async function bootstrap() {
   loop.start();
 
   // 그레이스풀 셧다운(M13): 진행 중 틱 완주 → 인프라 정리 → 종료.
-  const shutdownTimeoutMs =
-    Number(process.env[ConfigKey.ShutdownTimeoutMs]) || 10_000;
+  const shutdownTimeoutMs = getShutdownTimeoutMs();
   setupGracefulShutdown(app, {
     name: 'outbox-relay',
     timeoutMs: shutdownTimeoutMs,
