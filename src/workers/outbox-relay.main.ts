@@ -6,6 +6,11 @@ import { ConfigKey } from '../config/config-keys';
 import { OutboxModule } from '../outbox/outbox.module';
 import { RelayOutboxUseCase } from '../outbox/application/relay-outbox.use-case';
 import { initSentry } from '../common/sentry/init-sentry';
+import { RelayLoop } from './relay-loop';
+import {
+  setupGracefulShutdown,
+  getShutdownTimeoutMs,
+} from '../common/shutdown/graceful-shutdown';
 
 // outbox-relay: PENDING outbox를 주기 폴링해 Kafka로 발행한다(별도 프로세스).
 // HTTP/consumer 없는 순수 백그라운드 워커라 application context만 띄운다.
@@ -30,19 +35,16 @@ async function bootstrap() {
 
   logger.log(`outbox-relay 시작(폴링 ${pollMs}ms)`);
 
-  // 한 틱 예외가 루프를 죽이지 않도록 보호.
-  // running 플래그: 이전 틱이 끝나기 전에 새 틱이 쌓이는 것을 방지한다(틱 누적 방지).
-  let running = false;
-  setInterval(() => {
-    if (running) return; // 이전 틱이 아직 진행 중이면 건너뛴다(틱 누적 방지)
-    running = true;
-    void relay
-      .execute()
-      .catch((err: Error) => logger.error(`폴링 틱 실패: ${err.message}`))
-      .finally(() => {
-        running = false;
-      });
-  }, pollMs);
+  const loop = new RelayLoop(() => relay.execute(), pollMs);
+  loop.start();
+
+  // 그레이스풀 셧다운(M13): 진행 중 틱 완주 → 인프라 정리 → 종료.
+  const shutdownTimeoutMs = getShutdownTimeoutMs();
+  setupGracefulShutdown(app, {
+    name: 'outbox-relay',
+    timeoutMs: shutdownTimeoutMs,
+    drain: () => loop.stop(),
+  });
 }
 
 void bootstrap();

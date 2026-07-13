@@ -32,4 +32,5 @@ export const enum ConfigKey {
   KakaoBulkheadConcurrent = 'KAKAO_BULKHEAD_CONCURRENT',
   KakaoBulkheadQueue = 'KAKAO_BULKHEAD_QUEUE',
   KakaoTotalTimeoutMs = 'KAKAO_TOTAL_TIMEOUT_MS',
+  ShutdownTimeoutMs = 'SHUTDOWN_TIMEOUT_MS',
 }
