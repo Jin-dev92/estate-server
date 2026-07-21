@@ -23,32 +23,40 @@ export class OutboxDepthCollector {
   private readonly pendingGauge: Gauge;
   private readonly failedGauge: Gauge;
 
+  // registry.metrics()는 등록된 모든 메트릭의 get()을 Promise.all로 "병렬"
+  // 호출한다. 두 Gauge 모두에 collect 콜백을 걸어야 하지만(그래야 둘 다
+  // scrape마다 최신값을 반영), 그대로 두면 pendingGauge.get()이 DB 조회를
+  // 기다리는 동안 failedGauge.get()은 그 순간의 값을 즉시 스냅샷해버려
+  // "직전 scrape 값"이 섞여 나온다. 진행 중인 조회를 하나의 Promise로 공유해
+  // 두 Gauge의 get() 모두 같은 결과를 기다리게 만든다(scrape당 쿼리 1회 보장).
+  private inFlight: Promise<void> | undefined;
+
   constructor(
     @Inject(METRICS_REGISTRY) registry: Registry,
     private readonly prisma: PrismaService,
   ) {
-    // collect 콜백은 두 Gauge 중 하나에만 건다. 둘 다에 걸면 registry.metrics()
-    // 한 번에 collect()가 두 번 실행되어 DB 쿼리가 중복 발생한다 — collect()
-    // 안에서 두 Gauge 값을 함께 갱신하므로 하나만으로 충분하다.
     this.pendingGauge = new Gauge({
       name: OUTBOX_EVENTS_PENDING_METRIC,
       help: 'PENDING 상태로 대기 중인 outbox 이벤트 수 (scrape 시점 조회)',
       registers: [registry],
-      collect: () => this.collect(),
+      collect: () => this.collectOnce(),
     });
     this.failedGauge = new Gauge({
       name: OUTBOX_EVENTS_FAILED_METRIC,
       help: 'FAILED(poison) 상태로 격리된 outbox 이벤트 수 (scrape 시점 조회)',
       registers: [registry],
+      collect: () => this.collectOnce(),
     });
   }
 
-  async collect(): Promise<void> {
-    // 조회 실패/타임아웃 시 이전 scrape의 값이 그대로 남지 않도록 먼저
-    // reset한다 — 실패했는데 stale한 값이 계속 노출되는 걸 막기 위함이다.
-    this.pendingGauge.reset();
-    this.failedGauge.reset();
+  private collectOnce(): Promise<void> {
+    this.inFlight ??= this.collect().finally(() => {
+      this.inFlight = undefined;
+    });
+    return this.inFlight;
+  }
 
+  async collect(): Promise<void> {
     let timeoutHandle: NodeJS.Timeout | undefined;
 
     try {
@@ -76,8 +84,11 @@ export class OutboxDepthCollector {
       this.pendingGauge.set(countByStatus.get(OutboxStatus.Pending) ?? 0);
       this.failedGauge.set(countByStatus.get(OutboxStatus.Failed) ?? 0);
     } catch {
-      // 쿼리 실패/타임아웃은 조용히 삼킨다 — scrape 자체(registry.metrics())가
-      // 실패하면 안 되고, 이번 회차는 reset된(=stale하지 않은) 상태로 넘어간다.
+      // 쿼리 실패/타임아웃 시 값을 0으로 두면 "정상적으로 0건"과 "조회
+      // 실패"가 구분되지 않는다. remove()로 샘플 자체를 노출 목록에서
+      // 빼(scrape 자체는 실패시키지 않음) 애매한 값을 남기지 않는다.
+      this.pendingGauge.remove();
+      this.failedGauge.remove();
       return;
     } finally {
       // Promise.race에서 진 쪽 타이머가 남아있으면 M13 그레이스풀 셧다운을
