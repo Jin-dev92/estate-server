@@ -4,6 +4,7 @@ import { Registry } from 'prom-client';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { KAFKA_ADMIN } from '../infrastructure/kafka-lag.collector';
 import {
   METRICS_PATH,
   METRICS_REGISTRY,
@@ -18,6 +19,19 @@ import { MetricsModule } from '../metrics.module';
 function createMockPrisma() {
   return {
     outboxEvent: { groupBy: jest.fn().mockResolvedValue([]) },
+  };
+}
+
+// KafkaLagCollector(Task 5)가 KAFKA_ADMIN(kafkajs Admin)에 의존하게 되면서,
+// 이 스펙도 실제 브로커 없이 app.init()이 끝나야 한다. onModuleInit()에서
+// 진짜 브로커로 connect()를 시도하지 않도록 4개 메서드만 가벼운 mock으로
+// 대체한다.
+function createMockAdmin() {
+  return {
+    connect: jest.fn().mockResolvedValue(undefined),
+    disconnect: jest.fn().mockResolvedValue(undefined),
+    fetchOffsets: jest.fn().mockResolvedValue([]),
+    fetchTopicOffsets: jest.fn().mockResolvedValue([]),
   };
 }
 
@@ -55,6 +69,8 @@ describe('MetricsController', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(createMockPrisma())
+      .overrideProvider(KAFKA_ADMIN)
+      .useValue(createMockAdmin())
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
