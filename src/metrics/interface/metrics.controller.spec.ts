@@ -3,11 +3,23 @@ import { Test } from '@nestjs/testing';
 import { Registry } from 'prom-client';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   METRICS_PATH,
   METRICS_REGISTRY,
 } from '../infrastructure/metrics.registry';
 import { MetricsModule } from '../metrics.module';
+
+// OutboxDepthCollector(Task 4)가 PrismaService에 의존하게 되면서, MetricsModule
+// 단독으로 테스트 모듈을 구성할 때도 PrismaService가 DI에 해석되어야 한다.
+// 실제 PrismaService를 그대로 쓰면 onModuleInit()에서 진짜 DB($connect)로
+// 붙으려 하므로, GET /metrics의 기본 메트릭 노출만 검증하는 이 스펙에서는
+// outboxEvent.groupBy만 가진 가벼운 mock으로 대체한다.
+function createMockPrisma() {
+  return {
+    outboxEvent: { groupBy: jest.fn().mockResolvedValue([]) },
+  };
+}
 
 // Content-Type 헤더를 미디어 타입 + 파라미터(key=value)로 파싱한다.
 // Express의 res.send()가 문자열 body를 보낼 때 setCharset()이 content-type
@@ -40,7 +52,10 @@ describe('MetricsController', () => {
     // 수집 누락이 실제 프로덕션 부팅 경로와 동일하게 테스트에서 잡힌다.
     const moduleRef = await Test.createTestingModule({
       imports: [MetricsModule],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue(createMockPrisma())
+      .compile();
     app = moduleRef.createNestApplication();
     await app.init();
 
