@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import * as Sentry from '@sentry/nestjs';
 import { ConfigKey } from '../config/config-keys';
+import { ConsumerGroup } from '../events/consumer-groups';
 import { KafkaTopicInitializer } from '../events/kafka-topic-initializer';
 import { initSentry } from '../common/sentry/init-sentry';
 import {
@@ -34,7 +35,7 @@ async function bootstrap() {
       client: {
         brokers: config.getOrThrow<string>(ConfigKey.KafkaBrokers).split(','),
       },
-      consumer: { groupId: 'notification-worker' },
+      consumer: { groupId: ConsumerGroup.Notification },
     },
   });
   await app.startAllMicroservices();
