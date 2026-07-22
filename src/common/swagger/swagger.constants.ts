@@ -17,10 +17,13 @@ export const SWAGGER_BEARER_AUTH = 'access-token';
 // API 태그 이름. 컨트롤러의 @ApiTags() 인자와 일치해야 하며, setupSwagger 의
 // addTag() 로 문서 루트 tags 배열에 선언해 UI 그룹핑/문서 탐색에 노출한다.
 // (@ApiTags 만으로는 오퍼레이션에만 태깅되고 문서 루트 tags 는 채워지지 않는다.)
+export const SWAGGER_TAG_METRICS = 'metrics';
+
 export const SWAGGER_TAGS = [
   'auth',
   'property',
   'board',
   'chat',
   'notification',
+  SWAGGER_TAG_METRICS,
 ] as const;

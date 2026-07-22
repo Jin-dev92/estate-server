@@ -12,6 +12,7 @@ import { AuditModule } from './audit/audit.module';
 import { ChatModule } from './chat/chat.module';
 import { NotificationModule } from './notification/notification.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RateLimitModule } from './common/rate-limit/rate-limit.module';
     ChatModule,
     NotificationModule,
     RateLimitModule,
+    MetricsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })
