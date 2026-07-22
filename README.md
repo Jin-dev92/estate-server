@@ -72,7 +72,7 @@ flowchart TB
 | **아키텍처** | DDD (도메인 주도 설계) | 바운디드 컨텍스트 + 레이어드 구조 |
 | **테스트/품질** | Jest, ESLint, Prettier | 단위·e2e 테스트, 정적 검사 |
 | **부하테스트** | k6 | 핵심 엔드포인트 성능 baseline(p95·RPS·에러율) 측정 (M7) |
-| **관측성** | Sentry | 에러 추적 + 성능 모니터링(트랜잭션) (M10) |
+| **관측성** | Sentry, prom-client, Prometheus, Grafana | 개별 에러 추적(Sentry) + 집계 시계열 수집·시각화(prom-client/Prometheus/Grafana) (M10·M14) |
 | **프론트엔드** | Next.js 16 (App Router), React 19, Tailwind v4 | `web/` 서브모듈([estate-web](https://github.com/Jin-dev92/estate-web)). 온보딩 등 사용자 화면 |
 
 ---
@@ -232,19 +232,21 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 | **M11** ✅ | 측정 기반 성능 개선: 좋아요 카운터 Redis 전환 + k6 전후 측정 | 파생 캐시·원자 카운터·drift/TTL 치유·통제 실험 |
 | **M12** ✅ | 회복탄력성 패턴: 카카오 OAuth에 재시도·서킷 브레이커·벌크헤드(cockatiel) | 멱등성과 재시도 안전성·fail-fast·정책 조합 순서·동시성 격리 |
 | **M13** ✅ | 그레이스풀 셧다운: 5개 프로세스의 "죽는 방법" + 부하 중 재시작 실측 | SIGTERM 드레인·Kafka graceful leave·in-flight 유실 0·종료 예산 워치독 |
+| **M14** ✅ | 메트릭 대시보드: Prometheus + Grafana (RED 메트릭 · Kafka consumer lag · Outbox PENDING depth) | 집계 시계열 vs 에러추적(Sentry) 역할 분리·consumer lag·prom-client |
 | **CI** 🟡 | PR 게이트(build·typecheck + Prisma drift + lint·단위 테스트) + 수동 버전 범프 + Claude 자동 PR 리뷰 | GitHub Actions·서비스 컨테이너·migrate diff·claude-code-action |
 | **F1** ✅ | OAuth 소셜 로그인(카카오) | 카카오 code 교환·Account 모델·우리 JWT 발급 |
 | **F2** *(추후)* | 채팅 메시지 자동 번역(외국인 입주자 대응) | 외부 API 어댑터·i18n |
 
 > M0~M7은 1차 범위이며 각 단계가 독립적으로 동작 검증되도록 끊었습니다. 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시킵니다.
 >
-> **운영·견고함 후속(M8·M9·M10·M11·M12·M13·CI)** — M0~M7로 핵심 기능·정합성·부하 baseline은 끝났고, 그 위에 운영 견고함·관측성·측정 기반 성능 개선을 얹는 후속이다. 각 항목의 배경·트레이드오프는 [학습 노트](docs/study/마일스톤-학습-노트.md)(부하 stress/spike §8.5, Outbox DLQ §8, 좋아요 카운터 전환 §8.7)에 정리해 두었다. 순서는 느슨하며 우선순위에 따라 조정한다.
+> **운영·견고함 후속(M8·M9·M10·M11·M12·M13·M14·CI)** — M0~M7로 핵심 기능·정합성·부하 baseline은 끝났고, 그 위에 운영 견고함·관측성·측정 기반 성능 개선을 얹는 후속이다. 각 항목의 배경·트레이드오프는 [학습 노트](docs/study/마일스톤-학습-노트.md)(부하 stress/spike §8.5, Outbox DLQ §8, 좋아요 카운터 전환 §8.7)에 정리해 두었다. 순서는 느슨하며 우선순위에 따라 조정한다.
 > - **M8 (stress/spike):** ✅ 한계점·병목 탐색. 로컬 단일 머신은 "앱이 아니라 머신이 먼저 한계"라, 별도 부하 머신 대신 **DB 커넥션 풀을 1로 좁혀**(`connection_limit=1`) *앱이 먼저, 예측 지점에서* 터지게 하는 **통제 실험**으로 진행했다. closed VU로는 backpressure가 숨으니 open(arrival-rate) executor로 갔다. 결과는 §3.5.
 > - **M9 (Outbox DLQ):** ✅ poison message(영원히 실패)를 `PENDING → FAILED`로 격리해 무한 재시도를 끊었다. 실패 시 지수 백오프(`base*2^n`, cap)로 재시도하다 `OUTBOX_MAX_ATTEMPTS` 초과 시 격리하고, `lastError`/`failedAt`로 사후 조사. replay(되살리기)는 후속.
 > - **M10 (Sentry):** ✅ 에러 추적 + 성능 모니터링. M2.5 에러 봉투는 *사용자에게* 깔끔한 응답을 주지만 서버 내부는 로그뿐 → 5xx·미처리 예외·outbox poison을 Sentry로 보내 **풀 스택 + userId·role·path** 컨텍스트를 남긴다(4xx·예상 예외는 제외 — 단 422·400-validation은 FE/계약 버그 신호라 `SENTRY_4XX_SAMPLE_RATE`로 저샘플 캡처 옵션, 기본 off). HTTP 요청은 `tracesSampler`로 경로별 트랜잭션 계측(/docs 제외, M7 성능 측정의 운영판). DSN 없으면 no-op, `sendDefaultPii:false` + beforeSend로 PII 스크럽. *트레이드오프(관측성 ↔ 외부 의존):* 디버깅이 빨라지지만 외부 SaaS 의존·DSN 관리·PII 스크러빙이 따른다(DSN은 서버 env로만). **분산 트레이싱(HTTP→Kafka→워커)은 M10.5로 분리.**
 > - **M11 (좋아요 카운터 Redis 전환):** ✅ 게시글 좋아요 수 조회를 라이브 `COUNT(*)`에서 Redis 원자 카운터(`LikeCountReader`, 미스 시 COUNT로 재구축 후 `SET NX` 백필)로 전환하고, 전환 전/후를 k6로 실측 비교했다. 카운터는 `PostLike` 테이블의 **파생 캐시**이며 진실 원천이 아니다 — 증감은 좋아요/취소 트랜잭션이 **커밋된 이후에만** best-effort로 수행하고, TTL(3600s)로 drift를 주기적으로 치유한다. 실측 결과 before는 볼륨(글당 좋아요 수)에 비례해 p95가 6.9배까지 증가했지만, after는 같은 구간에서 8.8% 증가에 그쳐 사실상 평평했다(단, 볼륨 0에서는 카운터 조회의 왕복 비용 때문에 COUNT가 오히려 근소하게 유리 — 트레이드오프도 함께 기록). 상세: [`load/results/m11-like-counter.md`](load/results/m11-like-counter.md).
 > - **M12 (회복탄력성 패턴):** ✅ 유일한 외부 SaaS 동기 호출인 카카오 OAuth에 cockatiel로 타임아웃·재시도·서킷 브레이커·벌크헤드를 적용했다. 재시도는 멱등한 프로필 GET에만 건다 — OAuth 인가코드는 1회용이라 토큰 교환 POST 재시도는 코드 이중 사용을 낳는다. 조합은 `retry → circuitBreaker → bulkhead → timeout(시도당)` 순 wrap이며, 거절(회로 open·포화·타임아웃)은 `503 AUTH_KAKAO_UNAVAILABLE`로 변환하고 4xx는 그대로 전파한다. 서킷 상태 변화는 로깅+Sentry로 남긴다(조용히 실패하는 서킷 금지). 파라미터 6종+1(총 예산 포함 7종)은 env로 튜닝 가능(실측 전 잠정값)하며, 기동 시 `validateResilienceConfig`로 잘못된 값은 실패, 위험한 조합(임계 < 재시도+1, 총 예산 < 시도당 타임아웃)은 경고한다. 회복탄력성 계층은 경량 하네스([`load/resilience/harness.ts`](load/resilience/harness.ts))로 시나리오(정상·느림·간헐에러·장애)별 실측했다 — 정상 오탐 0·장애 fail-fast(503 평균 8ms)·간헐 30%에서 브레이커 미개방을 확인, 기본값을 잠정 기준으로 유지. "느린 카카오"에서 retry 스택으로 p95가 폭증하는 구조적 리스크는 **전체 시간 예산(`KAKAO_TOTAL_TIMEOUT_MS`, 프로필 재시도 전체의 벽시계 상한)**으로 해소했다 — 격리 실측에서 예산 없이 ~24s이던 프로필 꼬리가 8s로 끊겼다. 브레이커는 "죽은" 의존성에, 총 예산은 "느린" 의존성에 각각 상한을 건다. 상세: [`load/results/m12-resilience.md`](load/results/m12-resilience.md), 학습 노트 §8.10.
 > - **M13 (그레이스풀 셧다운):** ✅ 배경은 SIGTERM 무처리다 — 배포·재기동마다 컨테이너가 SIGTERM을 받고 바로 SIGKILL로 죽으면, 그 순간 처리 중이던 요청·컨슈머 오프셋·relay 배치가 전부 절단된다. 즉 매 배포가 작은 장애다. 공용 오케스트레이터 `setupGracefulShutdown`(시그널 1회만 수신 → `SHUTDOWN_TIMEOUT_MS`(기본 10000ms) 워치독 → `drain()` → `app.close()` → `exit`)을 만들어 main·오디오/알림/영속화 컨슈머 3종·outbox-relay까지 5개 프로세스에 배선했다. **drain은 `app.close()` 앞에서 직접 실행**한다 — Nest 라이프사이클 훅은 `onModuleDestroy`(Redis·Prisma 정리)가 `beforeApplicationShutdown`보다 먼저 불려서, 드레인을 훅 안에 두면 인프라가 먼저 닫혀버리는 함정이 있다(`enableShutdownHooks` 미사용, close 중복 회피 겸). main은 `drainHttpServer`(keep-alive 유휴 소켓 정리 + in-flight 완주 대기, 예산 1초 전엔 잔여 강제 종료)와 WS `disconnectSockets(true)`(정상 disconnect로 클라이언트 재연결 유도)를 드레인으로 쓰고, 컨슈머 3종은 `microservice.close()`(오프셋 커밋 → Kafka `LeaveGroup`)를, relay는 `RelayLoop.stop()`(폴링 인터벌 해제 + 진행 중 틱 완주)을 쓴다. 실측([`load/results/m13-graceful-shutdown.md`](load/results/m13-graceful-shutdown.md)) 결과 — **A) in-flight 완주:** 처리 중 로그인 프로브 10발이 SIGKILL에서는 10/10 절단(connection reset)되었지만 SIGTERM에서는 10/10 완주(201)했다. **B) 컨슈머 재조인:** 워커 교체 시 새 워커가 파티션을 넘겨받기까지 31초(세션 타임아웃 대기) → 6초(graceful leave로 즉시 리밸런스). **C) relay 중복 발행:** 500행 대형 배치 중간 절단 시 중복 발행이 473건 → 0건으로 줄었다(배치가 한 트랜잭션이라 절단되면 이미 발행된 부분까지 롤백 후 전량 재발행되는 증폭 구조를 발견). 측정 자체도 세 번 막혔다 — 쓰기 라우트 캡 하드코딩으로 GET 부하로 대체, k6의 멱등 GET 재시도가 절단을 가려 비멱등 login 프로브로 대체, 중복 발행 창이 좁아 SQL로 500행 대형 배치를 적립해 창을 넓혔다(정직 기록). **한계:** 드레인 공백 중의 신규 요청(connection refused)은 단일 인스턴스의 물리적 한계이고, 다운타임은 재기동 부팅 비용(Kafka 초기화 ~26s 관측)이 지배한다 — 해소는 멀티 인스턴스+LB(후속). 크래시(SIGKILL급)에서는 여전히 멱등 소비(M9)가 최후 방어선이다. 상세: [`load/results/m13-graceful-shutdown.md`](load/results/m13-graceful-shutdown.md), 학습 노트 §8.11.
+> - **M14 (메트릭 대시보드) ✅:** `prom-client`로 RED 메트릭(요청 수·에러율·지연 분포)과 **Kafka consumer lag**·**Outbox PENDING depth**를 인증 없는 `/metrics`에 노출하고, Prometheus 수집과 Grafana 대시보드를 구현했다. RED read 교차검증에서 k6 p95 26.09ms와 Prometheus p95 24.06ms가 근접했고 에러는 0이었다. RED write는 NestJS의 Guard → Interceptor 실행 순서 때문에 rate-limit guard가 거절한 429가 인터셉터 기반 지표에 집계되지 않는 한계를 확인했다. Outbox는 PENDING 피크 60에서 relay 재시작 후 약 7초 만에 드레인됐고, Kafka lag는 persistence만 피크 50(audit/notification 무영향)에서 재시작 후 약 3초 만에 드레인됐으며, 두 적체 모두 Sentry 이벤트는 발생하지 않았다. 라이브 실측 중 lag 컬렉터가 NestJS의 `-server` postfix를 반영하지 않아 존재하지 않는 consumer group을 조회하는 문제를 발견해 실제 group을 조회하도록 수정했다. 이로써 Sentry의 개별 에러 추적과 metrics의 예외 없는 적체·집계 시계열 관측이 상보적임을 확인했다. `/metrics`는 인증되지 않으므로 프로덕션에서는 **네트워크 수준의 접근 제한이 필수**다. 상세: [`load/results/m14-metrics.md`](load/results/m14-metrics.md).
 > - **CI (통합):** M7 부하 **smoke 자동화**(Actions 서비스 컨테이너로 PG·Redis·Kafka 기동 → 시드 → smoke → threshold 실패 시 red)를 시작점으로, **추가하고 싶은 CI 항목(린트·테스트·빌드·배포 등)을 한 마일스톤으로 통합**한다 — 구현은 그 CI 작업 시점에 함께 진행하고, 여기서는 자리만 잡아 둔다.
 >   - **1단계 구현 ✅:** `ci.yml`이 PR(→dev·main)에서 `nest build`(타입체크)와 Prisma 마이그레이션 drift(`migrate diff --exit-code`)를 검증한다. `version-bump.yml`(수동)은 커밋 타입으로 `package.json` 버전을 올려 dev로 PR을 연다. 부하 smoke·lint·test·CD는 후속.
 
@@ -322,6 +324,14 @@ PROFILE=load pnpm load:read     # load:create / load:login / load:ratelimit
 
 > notification-worker가 `MessageSent`·`CommentCreated`·`PostCreated`를 독립 consumer group으로 받아 수신자별 `Notification`을 멱등 적재(`@@unique[eventId,recipientId]`)하고, 미읽음 카운터를 INCR하며, 접속 중 수신자에겐 Redis 채널 → main `/notifications` WS로 푸시합니다. 수신자 해석: 채팅=방 상대방, 댓글=글 작성자, 게시글=건물 멤버(작성자/발신자 제외).
 
+### Observability (M14)
+
+| 메서드·경로 | 기능 | 인가 |
+|---|---|---|
+| `GET /metrics` | Prometheus 형식의 RED·Outbox depth·Kafka consumer lag 조회 | 인증 없음(운영망에서 네트워크 접근 제한 필수) |
+
+Swagger가 이 엔드포인트를 문서화합니다. `/metrics`는 애플리케이션 인증이 없으므로 운영망에서 네트워크 접근 제한이 필수이며, API 키를 `VITE_`·`NEXT_PUBLIC_` 같은 클라이언트 노출 환경변수에 두어서는 안 됩니다.
+
 ### 에러 응답 형식 (M2.5)
 
 모든 4xx/5xx 에러는 전역 ExceptionFilter가 아래 봉투로 통일해 내려줍니다. **FE는 메시지 문구 대신 안정적인 `code`로 분기**합니다.
@@ -364,6 +374,9 @@ $ git clone --recurse-submodules https://github.com/Jin-dev92/estate-server-kafk
 
 # 인프라(PostgreSQL·Redis·Kafka) 기동
 $ docker compose up -d
+
+$ docker compose up -d prometheus grafana
+# main은 호스트 :3000, Prometheus UI는 :9090, Grafana는 :3001
 
 # 의존성 설치 + 마이그레이션
 $ pnpm install
