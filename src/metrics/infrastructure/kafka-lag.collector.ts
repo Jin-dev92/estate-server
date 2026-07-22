@@ -33,6 +33,15 @@ const TOPICS_BY_GROUP: Readonly<
 // 커밋 오프셋이 없음을 나타내는 kafkajs 관용 값('-1' 문자열).
 const NO_COMMITTED_OFFSET = '-1';
 
+// NestJS 마이크로서비스 Kafka 서버(ServerKafka)는 설정한 groupId 뒤에 이
+// postfix를 붙여 실제 브로커 consumer group을 만든다(기본값 '-server').
+// 즉 워커가 groupId: 'persistence-worker'로 떠도 브로커에 등록되는 실제
+// group은 'persistence-worker-server'다. Admin.fetchOffsets는 브로커의 실제
+// group명으로 조회해야 하므로(존재하지 않는 base명으로 조회하면 committed가
+// 없어 lag이 항상 latest로 잘못 나온다) ConsumerGroup 상수에 이 postfix를
+// 붙여 쓴다. NestJS ServerKafka의 기본 postfixId와 반드시 일치해야 한다.
+const NESTJS_KAFKA_SERVER_GROUP_POSTFIX = '-server';
+
 // offset 조회 타임아웃(ms). scrape 경로가 브로커 응답 지연에 물리는 것을 막는
 // 상한. 초과하면 조회를 포기하고 Gauge를 reset된 상태(샘플 없음)로 남긴다.
 const KAFKA_LAG_QUERY_TIMEOUT_MS = 1000;
@@ -41,7 +50,8 @@ const KAFKA_LAG_QUERY_TIMEOUT_MS = 1000;
 // 이 배열을 받아 collect()에서만 수행한다 — 계산과 반영을 분리해, 타임아웃으로
 // 진 collectLag이 뒤늦게 끝나도 Gauge를 오염시키지 못하게 한다.
 interface LagSample {
-  group: ConsumerGroupId;
+  // 브로커에 실제 등록된 consumer group명(= ConsumerGroup 상수 + postfix).
+  group: string;
   topic: KafkaTopic;
   partition: string;
   lag: number;
@@ -128,8 +138,10 @@ export class KafkaLagCollector implements OnModuleInit, OnModuleDestroy {
     for (const [group, topics] of Object.entries(TOPICS_BY_GROUP) as Array<
       [ConsumerGroupId, readonly KafkaTopic[]]
     >) {
+      // 브로커에 실제 등록된 group명으로 조회·라벨링한다(NestJS postfix 반영).
+      const brokerGroupId = `${group}${NESTJS_KAFKA_SERVER_GROUP_POSTFIX}`;
       const committedByTopic = await this.admin.fetchOffsets({
-        groupId: group,
+        groupId: brokerGroupId,
         topics: [...topics],
       });
 
@@ -152,7 +164,7 @@ export class KafkaLagCollector implements OnModuleInit, OnModuleDestroy {
             : latestOffset;
 
           samples.push({
-            group,
+            group: brokerGroupId,
             topic,
             partition: String(latest.partition),
             lag,

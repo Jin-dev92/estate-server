@@ -16,6 +16,12 @@ const PERSISTENCE_CHAT_LAG = 3;
 const QUERY_TIMEOUT_MS = 1000;
 const NO_COMMITTED_OFFSET = '-1';
 
+// NestJS ServerKafka가 groupId에 붙이는 postfix. 브로커에 실제 등록되는
+// consumer group명은 'persistence-worker-server'이므로 collector도 이 이름으로
+// 조회·라벨링해야 한다(collector 소스와 반드시 일치).
+const NESTJS_SERVER_POSTFIX = '-server';
+const PERSISTENCE_BROKER_GROUP = `${ConsumerGroup.Persistence}${NESTJS_SERVER_POSTFIX}`;
+
 // kafkajs Admin은 거대 인터페이스라 collector가 실제로 쓰는 4개 메서드만
 // mock한다. `satisfies`로 실제 시그니처(Partial<jest.Mocked<Admin>>)를
 // 강제해 mock 메서드 이름·형태가 타입에서 벗어나지 않게 한다.
@@ -48,7 +54,7 @@ function stubFetchOffsets(admin: ReturnType<typeof createMockAdmin>) {
     Promise.resolve(
       (topics ?? []).map((topic) => {
         if (
-          groupId === ConsumerGroup.Persistence &&
+          groupId === PERSISTENCE_BROKER_GROUP &&
           (topic as KafkaTopic) === KafkaTopic.ChatEvents
         ) {
           return {
@@ -97,7 +103,7 @@ function stubPersistenceChatOffsets(
     Promise.resolve(
       (topics ?? []).map((topic) => {
         if (
-          groupId === ConsumerGroup.Persistence &&
+          groupId === PERSISTENCE_BROKER_GROUP &&
           (topic as KafkaTopic) === KafkaTopic.ChatEvents
         ) {
           return {
@@ -185,7 +191,14 @@ describe('KafkaLagCollector', () => {
 
         // Assert
         expect(text).toContain(
-          `kafka_consumer_lag{group="${ConsumerGroup.Persistence}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${PERSISTENCE_CHAT_LAG}`,
+          `kafka_consumer_lag{group="${PERSISTENCE_BROKER_GROUP}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${PERSISTENCE_CHAT_LAG}`,
+        );
+        // 회귀 가드: NestJS ServerKafka가 groupId에 '-server'를 붙이므로, 실제
+        // 브로커 group명으로 조회해야 한다. base명('persistence-worker')으로
+        // 조회하면 존재하지 않는 group이라 committed가 없어 lag이 latest로
+        // 잘못 나온다(라이브 실측으로 발견된 결함).
+        expect(admin.fetchOffsets).toHaveBeenCalledWith(
+          expect.objectContaining({ groupId: PERSISTENCE_BROKER_GROUP }),
         );
       });
     });
@@ -219,7 +232,7 @@ describe('KafkaLagCollector', () => {
 
         // Assert
         expect(text).toContain(
-          `kafka_consumer_lag{group="${ConsumerGroup.Persistence}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${latestOffset}`,
+          `kafka_consumer_lag{group="${PERSISTENCE_BROKER_GROUP}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${latestOffset}`,
         );
       });
     });
@@ -241,7 +254,7 @@ describe('KafkaLagCollector', () => {
 
         // Assert
         expect(text).toContain(
-          `kafka_consumer_lag{group="${ConsumerGroup.Persistence}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} 0`,
+          `kafka_consumer_lag{group="${PERSISTENCE_BROKER_GROUP}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} 0`,
         );
       });
     });
