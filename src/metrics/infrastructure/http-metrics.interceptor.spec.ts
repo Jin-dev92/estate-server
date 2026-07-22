@@ -1,4 +1,9 @@
-import { Controller, Get, INestApplication } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  INestApplication,
+  NotFoundException,
+} from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { Registry } from 'prom-client';
@@ -17,6 +22,13 @@ class FixtureBuildingController {
   @Get('posts')
   getPosts(): { ok: true } {
     return { ok: true };
+  }
+
+  // 핸들러가 예외를 던지는 경로. 인터셉터가 exception filter가 세팅한 실제
+  // status(404)를 기록하는지(기본 200으로 오집계하지 않는지) 검증용.
+  @Get('missing')
+  getMissing(): never {
+    throw new NotFoundException();
   }
 }
 
@@ -69,6 +81,31 @@ describe('HttpMetricsInterceptor', () => {
       expect(counter).not.toContain(FIXTURE_BUILDING_ID);
       expect(histogram).toContain('http_request_duration_seconds_count');
       expect(histogram).toContain('route="/buildings/:buildingId/posts"');
+    });
+  });
+
+  describe('핸들러가 예외를 던질 때', () => {
+    it('exception filter가 세팅한 실제 status(404)로 기록한다(200 오집계 금지)', async () => {
+      // Arrange: getMissing은 NotFoundException을 던진다.
+
+      // Act
+      const response = await request(app.getHttpServer() as App).get(
+        `/buildings/${FIXTURE_BUILDING_ID}/missing`,
+      );
+
+      const counter = await registry.getSingleMetricAsString(
+        'http_requests_total',
+      );
+
+      // Assert: 실제 응답은 404이고, 메트릭도 404로 집계돼야 한다. finalize로
+      // 읽으면 이 값이 200이 되어 RED Errors가 5xx/4xx를 놓친다.
+      expect(response.status).toBe(404);
+      expect(counter).toContain(
+        'method="GET",route="/buildings/:buildingId/missing",status="404"} 1',
+      );
+      expect(counter).not.toContain(
+        'route="/buildings/:buildingId/missing",status="200"',
+      );
     });
   });
 });

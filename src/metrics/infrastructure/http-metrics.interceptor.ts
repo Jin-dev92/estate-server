@@ -10,7 +10,6 @@ import { Reflector } from '@nestjs/core';
 import { Request, Response } from 'express';
 import { Counter, Histogram, Registry } from 'prom-client';
 import { defer, Observable } from 'rxjs';
-import { finalize } from 'rxjs/operators';
 import { METRICS_REGISTRY } from './metrics.registry';
 
 // RED(Rate/Errors/Duration) 메트릭 이름·라벨. 매직 스트링 반복을 막기 위해
@@ -76,23 +75,37 @@ export class HttpMetricsInterceptor implements NestInterceptor {
     return defer(() => {
       const startedAt = process.hrtime.bigint();
 
-      return next.handle().pipe(
-        // finalize는 성공/에러/취소 모든 경로에서 실행되므로, 에러 응답도
-        // 빠짐없이 Rate/Errors 카운트에 반영된다.
-        finalize(() => {
-          const elapsedSeconds =
-            Number(process.hrtime.bigint() - startedAt) /
-            NANOSECONDS_PER_SECOND;
-          const labels = {
-            method: request.method,
-            route,
-            status: String(response.statusCode),
-          };
+      // status는 응답 'finish' 시점에 읽는다. rxjs finalize는 핸들러가 던진
+      // 예외가 exception filter에 도달하기 "전"에 실행돼, 그 시점 response.
+      // statusCode가 아직 기본 200이라 4xx/5xx가 200으로 잘못 집계된다(RED
+      // Errors 유실). 'finish'는 filter가 최종 status를 세팅하고 응답을 다
+      // 보낸 뒤 발생하므로 던져진 예외의 실제 status까지 반영된다.
+      const record = () => {
+        const elapsedSeconds =
+          Number(process.hrtime.bigint() - startedAt) / NANOSECONDS_PER_SECOND;
+        const labels = {
+          method: request.method,
+          route,
+          status: String(response.statusCode),
+        };
 
-          this.requestsTotal.inc(labels);
-          this.requestDurationSeconds.observe(labels, elapsedSeconds);
-        }),
-      );
+        this.requestsTotal.inc(labels);
+        this.requestDurationSeconds.observe(labels, elapsedSeconds);
+      };
+      // 'finish'(정상 전송 완료) 우선, 없이 끊긴 연결은 'close'로 보완. once로
+      // 걸고 서로의 리스너를 제거해 이중 집계를 막는다.
+      const onFinish = () => {
+        response.removeListener('close', onClose);
+        record();
+      };
+      const onClose = () => {
+        response.removeListener('finish', onFinish);
+        record();
+      };
+      response.once('finish', onFinish);
+      response.once('close', onClose);
+
+      return next.handle();
     });
   }
 

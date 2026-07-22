@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Admin } from 'kafkajs';
 import { Registry } from 'prom-client';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
@@ -32,7 +33,7 @@ function createMockAdmin() {
     disconnect: jest.fn().mockResolvedValue(undefined),
     fetchOffsets: jest.fn().mockResolvedValue([]),
     fetchTopicOffsets: jest.fn().mockResolvedValue([]),
-  };
+  } satisfies Partial<jest.Mocked<Admin>>;
 }
 
 // Content-Type 헤더를 미디어 타입 + 파라미터(key=value)로 파싱한다.
