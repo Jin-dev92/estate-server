@@ -47,5 +47,21 @@ services:
       timeout: 5s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # Linux 호스트에서 host.docker.internal 해석을 위해 게이트웨이로 매핑
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana
+    ports: ["3001:3000"]
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/provisioning/dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   pgdata:
