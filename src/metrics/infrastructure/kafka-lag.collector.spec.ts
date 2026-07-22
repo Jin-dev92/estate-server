@@ -98,6 +98,7 @@ function stubPersistenceChatOffsets(
   admin: ReturnType<typeof createMockAdmin>,
   committedOffset: string,
   latestOffset: number,
+  lowOffset = 0,
 ) {
   admin.fetchOffsets.mockImplementation(({ groupId, topics }) =>
     Promise.resolve(
@@ -128,7 +129,7 @@ function stubPersistenceChatOffsets(
           partition: CHAT_PARTITION,
           offset: String(latestOffset),
           high: String(latestOffset),
-          low: '0',
+          low: String(lowOffset),
         },
       ]);
     }
@@ -233,6 +234,30 @@ describe('KafkaLagCollector', () => {
         // Assert
         expect(text).toContain(
           `kafka_consumer_lag{group="${PERSISTENCE_BROKER_GROUP}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${latestOffset}`,
+        );
+      });
+    });
+
+    describe('committed가 없고 retention으로 low가 0보다 크면', () => {
+      it('lag을 latest 전체가 아니라 high-low(소비 가능 backlog)로 계산한다', async () => {
+        // Arrange: low 아래 메시지는 retention으로 삭제돼 소비 불가하므로,
+        // 신규 그룹의 실제 backlog 상한은 high-low다(latest 전체가 아님).
+        const latestOffset = 100050;
+        const lowOffset = 100000;
+        const expectedLag = latestOffset - lowOffset;
+        stubPersistenceChatOffsets(
+          admin,
+          NO_COMMITTED_OFFSET,
+          latestOffset,
+          lowOffset,
+        );
+
+        // Act
+        const text = await registry.metrics();
+
+        // Assert
+        expect(text).toContain(
+          `kafka_consumer_lag{group="${PERSISTENCE_BROKER_GROUP}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${expectedLag}`,
         );
       });
     });

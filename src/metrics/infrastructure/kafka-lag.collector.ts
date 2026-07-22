@@ -159,9 +159,14 @@ export class KafkaLagCollector implements OnModuleInit, OnModuleDestroy {
           const hasCommitted =
             committed !== undefined && committed.offset !== NO_COMMITTED_OFFSET;
           const latestOffset = Number(latest.offset);
+          // committed가 없을 때(신규 그룹·offset reset·`-1`)의 lag은 latest
+          // 전체가 아니라 latest - low(low = 가장 오래된 보존 offset)로 본다.
+          // retention으로 low 아래 메시지는 이미 삭제돼 소비 불가하므로, 실제
+          // 소비 가능한 backlog 상한은 high - low다. low가 0이면 결과는 동일.
+          const earliestOffset = Number(latest.low ?? 0);
           const lag = hasCommitted
             ? Math.max(0, latestOffset - Number(committed.offset))
-            : latestOffset;
+            : Math.max(0, latestOffset - earliestOffset);
 
           samples.push({
             group: brokerGroupId,
