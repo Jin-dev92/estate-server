@@ -37,6 +37,16 @@ const NO_COMMITTED_OFFSET = '-1';
 // 상한. 초과하면 조회를 포기하고 Gauge를 reset된 상태(샘플 없음)로 남긴다.
 const KAFKA_LAG_QUERY_TIMEOUT_MS = 1000;
 
+// collectLag이 계산해 반환하는 순수 결과 1건(파티션 단위 lag). Gauge 갱신은
+// 이 배열을 받아 collect()에서만 수행한다 — 계산과 반영을 분리해, 타임아웃으로
+// 진 collectLag이 뒤늦게 끝나도 Gauge를 오염시키지 못하게 한다.
+interface LagSample {
+  group: ConsumerGroupId;
+  topic: KafkaTopic;
+  partition: string;
+  lag: number;
+}
+
 // Prometheus가 GET /metrics를 스크레이프하는 시점에만 committed offset(consumer
 // group이 마지막으로 처리 완료한 위치)과 latest offset(토픽의 최신 위치)을
 // 비교해 consumer lag을 계산하는 Collector. setInterval 등 별도 타이머를 두지
@@ -77,7 +87,24 @@ export class KafkaLagCollector implements OnModuleInit, OnModuleDestroy {
         }, KAFKA_LAG_QUERY_TIMEOUT_MS);
       });
 
-      await Promise.race([this.collectLag(), timeout]);
+      // collectLag은 Gauge를 만지지 않고 샘플만 계산해 반환한다. 그래야
+      // 타임아웃으로 진 collectLag이 뒤늦게 완료돼도 이미 reset된 Gauge를
+      // 다시 채우지 못한다. Gauge 갱신은 race에서 이긴 아래 경로에서만 한다.
+      const samples = await Promise.race([this.collectLag(), timeout]);
+
+      // reset+set은 await가 없는 동기 블록이라 한 번에 반영된다 — scrape가
+      // 겹쳐도 파티션 일부만 갱신된 중간 상태가 노출되지 않는다.
+      this.lagGauge.reset();
+      for (const sample of samples) {
+        this.lagGauge.set(
+          {
+            group: sample.group,
+            topic: sample.topic,
+            partition: sample.partition,
+          },
+          sample.lag,
+        );
+      }
     } catch {
       // 조회 실패/타임아웃 시 이전 scrape 값이 남아있으면 "직전 값"과 "조회
       // 실패"가 구분되지 않는다. labeled Gauge는 reset()하면 라벨 조합
@@ -91,8 +118,9 @@ export class KafkaLagCollector implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async collectLag(): Promise<void> {
-    this.lagGauge.reset();
+  // Gauge를 직접 만지지 않고 파티션별 lag 샘플만 계산해 반환한다(순수 계산).
+  private async collectLag(): Promise<LagSample[]> {
+    const samples: LagSample[] = [];
 
     // ponytail: 그룹 간 공유 토픽(예: ChatEvents)의 최신 offset을 그룹마다
     // 다시 조회한다 — 그룹·토픽 수가 적어 낭비가 크지 않다. 스크레이프
@@ -123,12 +151,16 @@ export class KafkaLagCollector implements OnModuleInit, OnModuleDestroy {
             ? Math.max(0, latestOffset - Number(committed.offset))
             : latestOffset;
 
-          this.lagGauge.set(
-            { group, topic, partition: String(latest.partition) },
+          samples.push({
+            group,
+            topic,
+            partition: String(latest.partition),
             lag,
-          );
+          });
         }
       }
     }
+
+    return samples;
   }
 }

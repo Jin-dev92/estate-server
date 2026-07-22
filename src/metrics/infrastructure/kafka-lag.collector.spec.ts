@@ -11,6 +11,11 @@ const PERSISTENCE_CHAT_COMMITTED_OFFSET = 7;
 const PERSISTENCE_CHAT_LATEST_OFFSET = 10;
 const PERSISTENCE_CHAT_LAG = 3;
 
+// collector의 KAFKA_LAG_QUERY_TIMEOUT_MS와 동일한 값. 소스 상수를 export하지
+// 않으므로 타임아웃 경계 테스트용으로만 로컬에 미러링한다.
+const QUERY_TIMEOUT_MS = 1000;
+const NO_COMMITTED_OFFSET = '-1';
+
 // kafkajs Admin은 거대 인터페이스라 collector가 실제로 쓰는 4개 메서드만
 // mock한다. `satisfies`로 실제 시그니처(Partial<jest.Mocked<Admin>>)를
 // 강제해 mock 메서드 이름·형태가 타입에서 벗어나지 않게 한다.
@@ -81,6 +86,50 @@ function stubFetchTopicOffsets(admin: ReturnType<typeof createMockAdmin>) {
   });
 }
 
+// Persistence+ChatEvents 조합에 임의의 committed/latest offset을 심는 픽스처.
+// -1(커밋 없음)·음수 차이 같은 경계값 검증에 재사용한다. 나머지 조합은 빈 응답.
+function stubPersistenceChatOffsets(
+  admin: ReturnType<typeof createMockAdmin>,
+  committedOffset: string,
+  latestOffset: number,
+) {
+  admin.fetchOffsets.mockImplementation(({ groupId, topics }) =>
+    Promise.resolve(
+      (topics ?? []).map((topic) => {
+        if (
+          groupId === ConsumerGroup.Persistence &&
+          (topic as KafkaTopic) === KafkaTopic.ChatEvents
+        ) {
+          return {
+            topic,
+            partitions: [
+              {
+                partition: CHAT_PARTITION,
+                offset: committedOffset,
+                metadata: null,
+              },
+            ],
+          };
+        }
+        return { topic, partitions: [] };
+      }),
+    ),
+  );
+  admin.fetchTopicOffsets.mockImplementation((topic) => {
+    if ((topic as KafkaTopic) === KafkaTopic.ChatEvents) {
+      return Promise.resolve([
+        {
+          partition: CHAT_PARTITION,
+          offset: String(latestOffset),
+          high: String(latestOffset),
+          low: '0',
+        },
+      ]);
+    }
+    return Promise.resolve([]);
+  });
+}
+
 describe('KafkaLagCollector', () => {
   let registry: Registry;
   let admin: ReturnType<typeof createMockAdmin>;
@@ -96,6 +145,7 @@ describe('KafkaLagCollector', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.useRealTimers();
     registry.clear();
   });
 
@@ -154,6 +204,66 @@ describe('KafkaLagCollector', () => {
         // 샘플 라인 자체가 사라진다.
         expect(text).not.toMatch(/^kafka_consumer_lag\{/m);
         expect(text).toContain('# HELP kafka_consumer_lag');
+      });
+    });
+
+    describe('committed offset이 -1(커밋 이력 없음)이면', () => {
+      it('lag을 latest offset 전체로 계산한다', async () => {
+        // Arrange: committed=-1 이면 처리한 메시지가 없다는 의미이므로 lag은
+        // latest offset 전체가 된다.
+        const latestOffset = 5;
+        stubPersistenceChatOffsets(admin, NO_COMMITTED_OFFSET, latestOffset);
+
+        // Act
+        const text = await registry.metrics();
+
+        // Assert
+        expect(text).toContain(
+          `kafka_consumer_lag{group="${ConsumerGroup.Persistence}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} ${latestOffset}`,
+        );
+      });
+    });
+
+    describe('committed offset이 latest보다 크면', () => {
+      it('lag을 음수가 아닌 0으로 하한 보정한다', async () => {
+        // Arrange: 리밸런스/재설정 등으로 committed가 latest를 앞설 수 있는데,
+        // 음수 lag은 무의미하므로 Math.max(0, ...)로 0에 고정한다.
+        const committedOffset = 10;
+        const latestOffset = 8;
+        stubPersistenceChatOffsets(
+          admin,
+          String(committedOffset),
+          latestOffset,
+        );
+
+        // Act
+        const text = await registry.metrics();
+
+        // Assert
+        expect(text).toContain(
+          `kafka_consumer_lag{group="${ConsumerGroup.Persistence}",topic="${KafkaTopic.ChatEvents}",partition="${CHAT_PARTITION}"} 0`,
+        );
+      });
+    });
+
+    describe('offset 조회가 1,000ms를 초과하면', () => {
+      it('조회를 포기하고 lag 샘플을 생략하며 타이머를 해제한다', async () => {
+        // Arrange: fetchOffsets가 영원히 resolve되지 않게 해 타임아웃 경로를
+        // 태운다. fake timer로 1,000ms를 인위적으로 흘려보낸다.
+        jest.useFakeTimers();
+        admin.fetchOffsets.mockReturnValue(new Promise(() => {}));
+        admin.fetchTopicOffsets.mockResolvedValue([]);
+
+        // Act: registry.metrics()가 collect()를 트리거하지만, 타이머를 진행시켜
+        // Promise.race의 timeout 쪽이 이기기 전에는 resolve되지 않는다.
+        const metricsPromise = registry.metrics();
+        await jest.advanceTimersByTimeAsync(QUERY_TIMEOUT_MS);
+        const text = await metricsPromise;
+
+        // Assert: 값 라인이 없어야 하고(생략), finally의 clearTimeout으로
+        // 남은 타이머가 0이어야 한다(M13 셧다운 방해 방지).
+        expect(text).not.toMatch(/^kafka_consumer_lag\{/m);
+        expect(jest.getTimerCount()).toBe(0);
       });
     });
   });
