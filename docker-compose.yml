@@ -14,6 +14,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Postgres 성능 관측용 exporter. pg_stat_database(커밋/롤백 TPS·데드락·캐시
+  # 적중률)와 pg_stat_activity(커넥션 포화)를 Prometheus 지표로 노출한다.
+  # 앱과 무관하게 DB 자체의 처리량·포화를 보기 위한 별도 수집 경로다.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    environment:
+      # compose 네트워크 내부에서 서비스명 postgres:5432로 접속(호스트 5433 매핑과 무관).
+      DATA_SOURCE_NAME: "postgresql://estate:estate@postgres:5432/estate?sslmode=disable"
+    ports: ["9187:9187"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
