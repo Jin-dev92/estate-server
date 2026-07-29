@@ -61,15 +61,19 @@ $ pnpm exec prisma migrate deploy
 # 3) main 프로세스 (HTTP API :3000 + WebSocket + Kafka producer)
 $ pnpm start:dev
 
-# 4) 워커 4종 — 각각 별도 터미널/프로세스(각자 독립 consumer group)
+# 4) 워커 4종 — 각각 별도 터미널/프로세스
+#    컨슈머 워커 3종은 각자 독립 consumer group으로 Kafka를 구독한다
 $ pnpm start:worker:persistence    # chat-events → Message 적재
 $ pnpm start:worker:notification   # chat+board-events → Notification + WS 푸시
 $ pnpm start:worker:audit          # 전체 구독 → AuditLog
+#    outbox-relay는 컨슈머가 아니라 DB의 PENDING 행을 폴링하는 producer다
 $ pnpm start:worker:outbox         # PENDING OutboxEvent 폴링 → Kafka 발행
 #   운영 빌드 후에는 start:prod / start:prod:persistence|notification|audit|outbox
 
 # 테스트
-$ pnpm test / test:e2e / test:cov
+$ pnpm test        # 단위 테스트
+$ pnpm test:e2e    # e2e 테스트
+$ pnpm test:cov    # 커버리지
 
 # 프론트엔드(web/ = estate-web) — 백엔드와 별개 프로세스
 $ cd web && pnpm install && pnpm dev
@@ -162,7 +166,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 | `GET /notifications/unread-count` | 미읽음 수(Redis 원자적 카운터) | 인증(본인) |
 | `PATCH /notifications/read` | 전체 읽음 처리 + 카운터 리셋 | 인증(본인) |
 | `PATCH /notifications/:id/read` | 단건 읽음 처리(+미읽음 카운터 감소, 멱등) | 인증(본인) |
-| WS `/notifications` (`notification` 이벤트) | 실시간 알림 푸시(socket.io 네임스페이스) | 본인(연결 시 `user:{userId}` 룸 자동 join) |
+| WS `/notifications` (`notification` 이벤트) | 실시간 알림 푸시(socket.io 네임스페이스, 핸드셰이크 `auth.token` JWT) | 본인(연결 시 `user:{userId}` 룸 자동 join) |
 
 > 수신자 해석: 채팅=방 상대방, 댓글=글 작성자, 게시글=건물 멤버(작성자/발신자 제외).
 
@@ -239,7 +243,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 | 10 | 이벤트 발행 추상화는 application 직접 발행(`EventPublisher` 포트) | 도메인이 Kafka를 모르게 한다 | after-commit 단순 발행이라 유실 창이 있었음 → 결정 13으로 해소 |
 | 11 | 워커별 엔트리포인트로 컨슈머 그룹 분리 | NestJS hybrid는 `@EventPattern`이 전역 등록되어 그룹별 분리가 어렵다 → 워커마다 별도 부트스트랩 | 프로세스가 5개로 늘지만 실제 배포 단위(워커=독립 배포·스케일)와 1:1 |
 | 12 | 알림 푸시는 best-effort(적재·카운터가 진실 원천) | 푸시 실패가 알림 유실이 되면 안 된다 | 1:N(`PostCreated`) 알림은 동기 생성이라 대량 건물은 배치/비동기화가 후속 과제 |
-| 13 | Transactional Outbox — 도메인 변경 + 이벤트 적재를 한 트랜잭션으로 | dual-write("DB는 썼는데 이벤트 유실")를 제거. relay가 `SELECT … FOR UPDATE SKIP LOCKED`로 잠그며 발행 | 폴링 주기만큼 지연이 더해짐(정합성↔지연). 중복 발행은 소비자 멱등이 흡수 = **at-least-once** |
+| 13 | Transactional Outbox — 도메인 변경 + 이벤트 적재를 한 트랜잭션으로 | dual-write("DB는 썼는데 이벤트 유실")를 제거. relay가 `SELECT … FOR UPDATE SKIP LOCKED`로 잠그며 발행. **board·membership 4종에만 적용**하고 chat은 지연 최소화를 위해 직접 발행을 유지 | 폴링 주기만큼 지연이 더해짐(정합성↔지연). 중복 발행은 소비자 멱등이 흡수 = **at-least-once**. chat 경로에는 여전히 유실 창이 남음 |
 
 ---
 
