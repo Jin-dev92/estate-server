@@ -29,14 +29,11 @@
 
 **Kafka**는 producer가 토픽에 발행한 메시지를 consumer가 비동기로 처리하게 하는 메시지 브로커입니다. **producer**는 발행자, **consumer**는 처리자입니다.
 
-```text
-Post INSERT·커밋
-      │
-      ▼
-Kafka board-events
-      │
-      ▼
-감사 워커 → AuditLog INSERT
+```mermaid
+flowchart TD
+    A["Post INSERT · 커밋"] --> B{{"Kafka board-events"}}
+    B --> C["감사 워커"]
+    C --> D[("AuditLog INSERT")]
 ```
 
 이 선택은 작은 범위에서 producer–consumer 왕복과 감사 적재를 검증하기에는 단순했습니다. 도메인은 `EventPublisher` 포트에만 의존하고 Kafka 구현을 몰랐습니다. 같은 이벤트가 다시 전달될 가능성은 `AuditLog.eventId`의 unique 제약으로 흡수했습니다.
@@ -45,12 +42,10 @@ Kafka board-events
 
 대신 실패 경계가 분명했습니다.
 
-```text
-Post 커밋 성공
-      │
-      X  프로세스 중단 또는 Kafka 발행 실패
-      │
-PostCreated 유실
+```mermaid
+flowchart TD
+    A["Post 커밋 성공"] --> B["프로세스 중단 또는 Kafka 발행 실패"]
+    B -. 발행되지 않음 .-> C["PostCreated 유실"]
 ```
 
 **dual-write**는 하나의 논리적 작업이 DB와 메시지 브로커처럼 서로 다른 저장소를 각각 갱신하는 방식입니다. 이 직접 발행은 두 쓰기를 원자적으로 묶지 못했습니다. 당시에는 Outbox를 동시에 도입하지 않고, 이 유실 창을 명시적인 후속 과제로 분리했습니다.
@@ -67,10 +62,13 @@ PostCreated 유실
 
 **파티션 키(partition key)**는 Kafka가 메시지를 넣을 파티션을 정하는 값입니다. 채팅은 `roomId`를 키로 사용해 같은 방의 메시지를 같은 파티션에 배치합니다.
 
-```text
-채팅 메시지
-   ├──> Redis pub/sub ──> 상대방 화면
-   └──> Kafka chat-events ──> 영속화 워커 ──> Message INSERT
+```mermaid
+flowchart LR
+    M["채팅 메시지"] -->|즉시 전달| R["Redis pub/sub"]
+    M -->|비동기 영속화| K{{"Kafka chat-events"}}
+    R --> S["상대방 화면"]
+    K --> W["영속화 워커"]
+    W --> D[("Message INSERT")]
 ```
 
 **결과적 정합성(eventual consistency)**은 데이터가 즉시 일치하지 않더라도 시간이 지나 같은 상태로 수렴하는 성질입니다. 이 결정은 “전달은 됐지만 DB에는 아직 없는” 결과적 정합성 구간을 만듭니다. 발행 자체가 실패할 수 있는 창도 남습니다. 채팅 전송 유스케이스는 실패를 로깅하고 삼키는 `publish()`를 사용하며, Outbox relay 전용 `publishOrThrow()`를 사용하지 않습니다.
@@ -105,18 +103,16 @@ Outbox는 다음 5개 경로에 적용했습니다.
 7. OutboxEvent를 PUBLISHED로 변경
 ```
 
-```text
-┌────────── PostgreSQL 트랜잭션 ──────────┐
-│ Post INSERT + OutboxEvent INSERT(PENDING) │
-└──────────────────┬───────────────────────┘
-                   │ 커밋
-                   ▼
-              outbox-relay
-                   │
-                   ▼
-          Kafka board-events
-             ├──> 감사 워커
-             └──> 알림 워커
+```mermaid
+flowchart TD
+    subgraph TX["하나의 PostgreSQL 트랜잭션"]
+        P["Post INSERT"]
+        O["OutboxEvent INSERT · status=PENDING"]
+    end
+    TX -->|커밋| R["outbox-relay 폴링"]
+    R --> K{{"Kafka board-events"}}
+    K --> A["감사 워커"]
+    K --> N["알림 워커"]
 ```
 
 이 시스템에는 영속화·감사·알림 역할의 consumer group이 있습니다. **consumer group**은 같은 group 안에서 파티션을 분담하고, 다른 group에는 같은 메시지를 독립적으로 전달하는 Kafka의 소비 단위입니다.
@@ -163,13 +159,14 @@ Outbox가 보장하는 것은 “Post만 커밋되고 발행 의도는 사라지
 
 **DLQ(Dead Letter Queue)**는 반복 실패 메시지를 정상 흐름에서 격리해 사후 조사를 기다리게 하는 영역입니다. 이 구현은 별도 Kafka 토픽 대신 `OutboxEvent`의 `FAILED` 상태를 사용합니다.
 
-```text
-PENDING
-   ├── 발행 성공 ─────────────────> PUBLISHED
-   │
-   └── 발행 실패
-          ├── 최대 횟수 미만 ─────> PENDING + nextAttemptAt
-          └── 최대 횟수 도달 ─────> FAILED + failedAt
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> PUBLISHED: 발행 성공
+    PENDING --> PENDING: 발행 실패 · 최대 횟수 미만 → nextAttemptAt 설정
+    PENDING --> FAILED: 발행 실패 · 최대 횟수 도달 → failedAt 기록
+    PUBLISHED --> [*]
+    FAILED --> [*]: 자동 처리 중단(replay 미구현)
 ```
 
 기본 설정은 최대 5회, base 1초, cap 60초입니다. 첫 네 번의 실패 뒤 1초, 2초, 4초, 8초를 기다리고, 다섯 번째 실패에서 `FAILED`로 전환합니다. 기본 최대 횟수에서는 60초 cap에 닿지 않습니다.
