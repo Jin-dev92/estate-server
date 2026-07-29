@@ -180,7 +180,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 ### 에러 응답 형식
 
-모든 4xx/5xx 에러는 전역 ExceptionFilter가 아래 봉투로 통일해 내려줍니다. **FE는 메시지 문구 대신 안정적인 `code`로 분기**합니다. 전체 `code` 목록은 `/docs`에서 확인하세요.
+모든 4xx/5xx 에러는 전역 ExceptionFilter가 아래 봉투로 통일해 내려줍니다. **FE는 메시지 문구 대신 안정적인 `code`로 분기**합니다.
 
 ```json
 {
@@ -191,6 +191,19 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
   "timestamp": "2026-06-12T08:00:00.000Z"
 }
 ```
+
+`code`의 진실 원천은 컨텍스트별 에러 정의 파일이며, 각 코드의 HTTP status와 메시지가 한곳에 선언되어 있습니다.
+
+| 컨텍스트 | 파일 | 대표 코드 |
+|---|---|---|
+| Auth | [`src/auth/auth.errors.ts`](src/auth/auth.errors.ts) | `AUTH_EMAIL_IN_USE`(409) · `AUTH_INVALID_CREDENTIALS`(401) · `AUTH_KAKAO_UNAVAILABLE`(503) |
+| Property | [`src/property/property.errors.ts`](src/property/property.errors.ts) | `PROPERTY_NOT_BUILDING_OWNER`(403) · `PROPERTY_INVALID_INVITE_CODE`(404) |
+| Board | [`src/board/board.errors.ts`](src/board/board.errors.ts) | `BOARD_POST_NOT_FOUND`(404) · `BOARD_NOT_BUILDING_MEMBER`(403) |
+| Chat | [`src/chat/chat.errors.ts`](src/chat/chat.errors.ts) | `CHAT_ROOM_NOT_FOUND`(404) · `CHAT_NOT_ROOM_PARTICIPANT`(403) |
+| Rate limit | [`src/common/rate-limit/rate-limit.errors.ts`](src/common/rate-limit/rate-limit.errors.ts) | `RATE_LIMIT_EXCEEDED`(429, `Retry-After` 헤더 포함) |
+| 공통 | [`src/common/errors/`](src/common/errors) | `COMMON_VALIDATION_FAILED`(400) · `VALIDATION_FAILED`(422, 도메인 불변식 위반) · `COMMON_UNAUTHORIZED`(401) · `COMMON_INTERNAL_ERROR`(500) |
+
+> 전체 목록을 README에 복사해 두지 않는 이유는 코드 추가 시 문서만 뒤처지기 때문입니다. 실제로 이전 README의 코드 표는 14개를 나열했으나 그 시점에 이미 10개(`CHAT_*` 4종, `PROPERTY_LEASE_*` 2종, `AUTH_*` 4종)가 누락된 상태였습니다.
 
 ---
 
