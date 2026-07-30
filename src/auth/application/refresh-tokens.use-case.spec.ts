@@ -279,6 +279,33 @@ describe('RefreshTokensUseCase', () => {
 
       expect(issueSession.issue).not.toHaveBeenCalled();
     });
+
+    // 재리뷰 지적: 이 경로가 무음이었다 — 바로 위 isUsed() 분기(확정된
+    // 재사용)는 logger.warn + Sentry를 남기는데 경합 패배 경로만 로그가
+    // 없어서, 경합이 실제로 얼마나 발생하는지 관측할 수단이 없었다.
+    // Sentry는 의도적으로 캡처하지 않는다 — 정상 클라이언트의 중복 제출로도
+    // 발생할 수 있어 노이즈가 될 수 있다고 판단했다(보고서 참고).
+    it('should log a warning with userId/familyId but no token material, and not capture Sentry', async () => {
+      const { useCase, repo } = setup(persisted());
+      repo.markUsed.mockResolvedValue(0);
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn');
+      expect.assertions(3);
+
+      try {
+        await useCase.execute(RAW_TOKEN);
+      } catch {
+        // 예외 자체는 위 케이스에서 검증한다.
+      }
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringMatching(
+          new RegExp(`userId=${USER_ID}.*familyId=${FAMILY_ID}`),
+        ),
+      );
+      const message = warnSpy.mock.calls[0][0] as string;
+      expect(message).not.toContain(RAW_TOKEN);
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
   });
 
   describe('when the token is expired', () => {

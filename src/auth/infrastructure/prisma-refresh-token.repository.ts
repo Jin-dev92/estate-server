@@ -125,10 +125,15 @@ export class PrismaRefreshTokenRepository implements RefreshTokenRepository {
     // 2단계: 로그인 시각은 그 가족의 "첫 행"의 createdAt이다. 첫 행은 이미
     // 회전으로 소비돼 usedAt이 채워져 있으므로, 여기서는 usedAt·revokedAt
     // 조건을 걸지 않고 familyId로만 최솟값을 구한다.
+    // orderBy 없이 두면 반환 순서가 DB에 맡겨져 매 요청마다 흔들린다.
+    // 세션 목록 UI는 순서가 결정적이어야 하므로 로그인 시각(MIN(createdAt))
+    // 기준 최신순(desc)으로 정렬한다 — 방금 로그인한 세션이 목록 위에
+    // 보이는 편이 사용자가 "지금 이 세션"을 찾기 쉽다.
     const grouped = await this.prisma.refreshToken.groupBy({
       by: ['familyId'],
       where: { userId, familyId: { in: familyIds } },
       _min: { createdAt: true },
+      orderBy: { _min: { createdAt: 'desc' } },
     });
     return grouped
       .filter((g) => g._min.createdAt != null)

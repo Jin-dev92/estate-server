@@ -79,6 +79,21 @@ export class RefreshTokensUseCase {
       // throw는 트랜잭션 안이므로 롤백되어 이 요청은 새 토큰도 남기지 않는다.
       const updated = await this.refreshTokens.markUsed(found.id!, now, tx);
       if (updated === 0) {
+        // 위쪽 isUsed() 분기(이미 커밋되어 확정된 재사용)와 성격이 다르다.
+        // findByHash가 트랜잭션 밖이라 같은 토큰이 거의 동시에 두 번
+        // 들어오면 둘 다 usedAt: null을 읽고 여기까지 온다 — 이 요청은
+        // compare-and-set에서 진 쪽이므로 401로 거절하지만, 가족은
+        // 폐기하지 않는다. 공격 경합인지 정상 클라이언트의 중복 제출
+        // (네트워크 재시도·이중 클릭 등)인지 서버가 구분할 근거가 없어서다
+        // (IP·User-Agent를 저장하지 않기로 한 결정 때문에 구분 단서도 없다).
+        // 여기서 가족을 폐기하면 정상 사용자의 중복 제출을 공격으로 오인해
+        // 전 기기를 로그아웃시키는 UX 회귀가 된다. 이 판단의 근거와 한계는
+        // docs/superpowers/specs/2026-07-30-refresh-token-design.md §4.5·
+        // §14를 참고. 로그만 남기고 Sentry는 캡처하지 않는다 — 정상 클라이언트의
+        // 중복 제출로도 발생할 수 있어 노이즈가 될 수 있다고 판단했다.
+        this.logger.warn(
+          `리프레시 토큰 동시 제출 경합 — 이 요청 패배(가족 미폐기, 위쪽 재사용 탐지와 구분). userId=${found.userId} familyId=${found.familyId}`,
+        );
         throw new AppException(AuthError.REFRESH_TOKEN_REUSED);
       }
       return this.issueSession.issue(

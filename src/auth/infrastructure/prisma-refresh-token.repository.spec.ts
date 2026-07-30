@@ -211,7 +211,35 @@ describe('PrismaRefreshTokenRepository', () => {
         by: ['familyId'],
         where: { userId: USER_ID, familyId: { in: ['fam-a'] } },
         _min: { createdAt: true },
+        orderBy: { _min: { createdAt: 'desc' } },
       });
+    });
+
+    // Minor 재리뷰 지적: orderBy가 없으면 반환 순서가 DB에 맡겨져 매
+    // 요청마다 흔들린다. 최신 로그인 세션이 위에 오도록 desc로 정렬한다.
+    it('should order sessions by login time descending (most recent first)', async () => {
+      const delegate = createDelegate();
+      const OLDER = new Date('2026-07-20T09:00:00.000Z');
+      const NEWER = new Date('2026-07-28T09:00:00.000Z');
+      delegate.findMany.mockResolvedValue([
+        { familyId: 'fam-older' },
+        { familyId: 'fam-newer' },
+      ]);
+      // 실제 DB는 orderBy 조건대로 정렬해 돌려준다 — mock도 그 순서(최신
+      // 먼저)를 그대로 흉내 내어, 리포지토리가 순서를 임의로 바꾸지 않고
+      // 그대로 통과시키는지 확인한다.
+      delegate.groupBy.mockResolvedValue([
+        { familyId: 'fam-newer', _min: { createdAt: NEWER } },
+        { familyId: 'fam-older', _min: { createdAt: OLDER } },
+      ]);
+      const repo = createRepo(delegate);
+
+      const sessions = await repo.findActiveFamilies(USER_ID, NOW);
+
+      expect(sessions).toEqual([
+        { familyId: 'fam-newer', createdAt: NEWER },
+        { familyId: 'fam-older', createdAt: OLDER },
+      ]);
     });
 
     it('should query only currently-usable rows for the active familyId set', async () => {
