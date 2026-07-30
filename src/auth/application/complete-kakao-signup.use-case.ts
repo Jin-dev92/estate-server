@@ -15,7 +15,7 @@ import {
   OnboardingTokenIssuer,
   OnboardingPayload,
 } from '../domain/onboarding-token';
-import { TOKEN_ISSUER, TokenIssuer } from '../domain/token-issuer';
+import { IssueSessionService, TokenPair } from './issue-session.service';
 
 const ALLOWED: Role[] = [Role.OWNER, Role.TENANT];
 
@@ -26,13 +26,13 @@ export class CompleteKakaoSignupUseCase {
     private readonly onboarding: OnboardingTokenIssuer,
     @Inject(ACCOUNT_REPOSITORY) private readonly accounts: AccountRepository,
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
-    @Inject(TOKEN_ISSUER) private readonly tokenIssuer: TokenIssuer,
+    private readonly issueSession: IssueSessionService,
   ) {}
 
   async execute(input: {
     onboardingToken: string;
     role: Role;
-  }): Promise<{ accessToken: string }> {
+  }): Promise<TokenPair> {
     if (!ALLOWED.includes(input.role))
       throw new AppException(AuthError.INVALID_ROLE);
 
@@ -51,13 +51,11 @@ export class CompleteKakaoSignupUseCase {
     if (existing) {
       const user = await this.users.findById(existing.userId);
       if (!user) throw new AppException(AuthError.USER_NOT_FOUND);
-      return {
-        accessToken: await this.tokenIssuer.issue({
-          sub: user.id!,
-          email: user.email,
-          role: user.role,
-        }),
-      };
+      return this.issueSession.issue({
+        userId: user.id!,
+        email: user.email,
+        role: user.role,
+      });
     }
 
     let user: User;
@@ -80,12 +78,10 @@ export class CompleteKakaoSignupUseCase {
       }
       throw e;
     }
-    return {
-      accessToken: await this.tokenIssuer.issue({
-        sub: user.id!,
-        email: user.email,
-        role: user.role,
-      }),
-    };
+    return this.issueSession.issue({
+      userId: user.id!,
+      email: user.email,
+      role: user.role,
+    });
   }
 }
