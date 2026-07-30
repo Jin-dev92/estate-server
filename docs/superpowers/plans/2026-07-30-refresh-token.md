@@ -247,7 +247,7 @@ git commit -m "[M15]feat: 리프레시 토큰 에러 코드 3개 추가
 - Produces:
   - `RefreshToken` 클래스
   - `RefreshToken.create(input: { userId: string; tokenHash: string; familyId: string; expiresAt: Date }): RefreshToken`
-  - `RefreshToken.fromPersistence(props: RefreshTokenProps): RefreshToken`
+  - `RefreshToken.reconstitute(props: RefreshTokenProps): RefreshToken`
   - getter: `id: string | null`, `userId: string`, `tokenHash: string`, `familyId: string`, `expiresAt: Date`, `usedAt: Date | null`, `revokedAt: Date | null`
   - `isUsable(now: Date): boolean`
   - `isUsed(): boolean`
@@ -393,7 +393,7 @@ export class RefreshToken {
     });
   }
 
-  static fromPersistence(props: RefreshTokenProps): RefreshToken {
+  static reconstitute(props: RefreshTokenProps): RefreshToken {
     return new RefreshToken(props);
   }
 
@@ -963,7 +963,7 @@ export class PrismaRefreshTokenRepository implements RefreshTokenRepository {
   }
 
   private toEntity(row: RefreshTokenRow): RefreshToken {
-    return RefreshToken.fromPersistence({
+    return RefreshToken.reconstitute({
       id: row.id,
       userId: row.userId,
       tokenHash: row.tokenHash,
@@ -1403,7 +1403,7 @@ function persisted(overrides?: {
   revokedAt?: Date | null;
   expiresAt?: Date;
 }): RefreshToken {
-  return RefreshToken.fromPersistence({
+  return RefreshToken.reconstitute({
     id: TOKEN_ID,
     userId: USER_ID,
     tokenHash: TOKEN_HASH,
@@ -1428,7 +1428,7 @@ function setup(found: RefreshToken | null) {
 
   const users = {
     findById: jest.fn().mockResolvedValue(
-      User.fromPersistence({
+      User.reconstitute({
         id: USER_ID,
         email: EMAIL,
         name: '입주자',
@@ -1601,7 +1601,7 @@ describe('RefreshTokensUseCase', () => {
 });
 ```
 
-> `User.fromPersistence`가 존재하지 않으면 `src/auth/domain/user.entity.ts`를 읽어 실제 복원 메서드 이름으로 바꾼다.
+> `User.reconstitute`가 존재하지 않으면 `src/auth/domain/user.entity.ts`를 읽어 실제 복원 메서드 이름으로 바꾼다.
 
 - [ ] **Step 2: 테스트 실패 확인**
 
@@ -1765,7 +1765,7 @@ describe('LogoutUseCase', () => {
 
   it('should revoke the family of the submitted token', async () => {
     const { useCase, repo } = setup(
-      RefreshToken.fromPersistence({
+      RefreshToken.reconstitute({
         id: 'token-1',
         userId: USER_ID,
         tokenHash: TOKEN_HASH,
