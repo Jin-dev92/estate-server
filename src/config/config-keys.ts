@@ -9,6 +9,8 @@ export const enum ConfigKey {
   DatabaseUrl = 'DATABASE_URL',
   JwtSecret = 'JWT_SECRET',
   JwtExpiresIn = 'JWT_EXPIRES_IN',
+  RefreshTokenTtlDays = 'REFRESH_TOKEN_TTL_DAYS',
+  RefreshTokenBytes = 'REFRESH_TOKEN_BYTES',
   RedisUrl = 'REDIS_URL',
   KafkaBrokers = 'KAFKA_BROKERS',
   RateLimitWindowSec = 'RATE_LIMIT_WINDOW_SEC',
