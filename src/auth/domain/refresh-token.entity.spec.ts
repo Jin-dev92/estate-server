@@ -53,6 +53,14 @@ describe('RefreshToken', () => {
 
       expect(usable).toBe(false);
     });
+
+    it('should return false when expiresAt equals now (만료 시각에 도달한 것은 이미 만료로 본다)', () => {
+      const token = createToken({ expiresAt: NOW });
+
+      const usable = token.isUsable(NOW);
+
+      expect(usable).toBe(false);
+    });
   });
 
   describe('isUsed', () => {
@@ -62,6 +70,12 @@ describe('RefreshToken', () => {
 
       expect(used.isUsed()).toBe(true);
       expect(expired.isUsed()).toBe(false);
+    });
+
+    it('should return false when only revoked (revocation is not consumption)', () => {
+      const revoked = createToken().revoke(NOW);
+
+      expect(revoked.isUsed()).toBe(false);
     });
   });
 

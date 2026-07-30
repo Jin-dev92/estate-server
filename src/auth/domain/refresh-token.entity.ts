@@ -31,7 +31,7 @@ export class RefreshToken {
     });
   }
 
-  static fromPersistence(props: RefreshTokenProps): RefreshToken {
+  static reconstitute(props: RefreshTokenProps): RefreshToken {
     return new RefreshToken(props);
   }
 
