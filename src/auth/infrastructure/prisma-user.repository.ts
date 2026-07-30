@@ -6,6 +6,7 @@ import { Role } from '../domain/role.enum';
 import { UserRepository } from '../domain/user.repository';
 import { AppException } from '../../common/errors/app-exception';
 import { AuthError } from '../auth.errors';
+import { TransactionClient } from '../../outbox/domain/transaction-runner';
 
 @Injectable()
 export class PrismaUserRepository implements UserRepository {
@@ -40,9 +41,9 @@ export class PrismaUserRepository implements UserRepository {
     });
   }
 
-  async update(user: User): Promise<User> {
+  async update(user: User, tx?: TransactionClient): Promise<User> {
     try {
-      const row = await this.prisma.user.update({
+      const row = await (tx ?? this.prisma).user.update({
         where: { id: user.id! },
         data: { name: user.name, passwordHash: user.passwordHash },
       });

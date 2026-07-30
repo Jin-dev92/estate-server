@@ -112,13 +112,18 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 | 메서드·경로 | 기능 | 인가 |
 |---|---|---|
 | `POST /auth/signup` | 회원가입(기본 역할 TENANT; `role` 선택적 — OWNER·TENANT만 허용, ADMIN 불가) | 공개 |
-| `POST /auth/login` | 로그인, JWT `accessToken` 발급 | 공개 |
-| `POST /auth/kakao` | 카카오 로그인(code 교환) — 기존 유저 `{accessToken}`, 신규 `{onboardingToken}`. 카카오 장애 시 `503 AUTH_KAKAO_UNAVAILABLE` | 공개 |
-| `POST /auth/kakao/complete` | 카카오 신규 가입 완료(역할 선택) → `{accessToken}` | 공개(onboarding 토큰 보유) |
+| `POST /auth/login` | 로그인, JWT `accessToken` + `refreshToken` 발급 | 공개 |
+| `POST /auth/kakao` | 카카오 로그인(code 교환) — 기존 유저 `{accessToken, refreshToken}`, 신규 `{onboardingToken}`. 카카오 장애 시 `503 AUTH_KAKAO_UNAVAILABLE` | 공개 |
+| `POST /auth/kakao/complete` | 카카오 신규 가입 완료(역할 선택) → `{accessToken, refreshToken}` | 공개(onboarding 토큰 보유) |
 | `GET /auth/me` | 내 정보(id·email·role) 조회(토큰 기반, DB 미조회) | 인증 |
 | `GET /auth/profile` | 프로필(id·email·name·role) 조회(DB) | 인증(본인) |
 | `PATCH /auth/profile` | 프로필 이름 수정 | 인증(본인) |
-| `PATCH /auth/password` | 비밀번호 변경(현재 비번 확인 + 새 비번 8자+) | 인증(본인) |
+| `PATCH /auth/password` | 비밀번호 변경(현재 비번 확인 + 새 비번 8자+) + 전체 세션 폐기 | 인증(본인) |
+| `POST /auth/refresh` | 토큰 갱신(회전). 소비된 토큰 재제출 시 세션 전체 폐기 | 공개(리프레시 토큰 보유) |
+| `POST /auth/logout` | 현재 세션 폐기(멱등) | 공개(리프레시 토큰 보유) |
+| `POST /auth/logout-all` | 내 모든 세션 폐기 | 인증 |
+| `GET /auth/sessions` | 내 활성 세션 목록(로그인 시각·`current`) | 인증(본인) |
+| `DELETE /auth/sessions/:familyId` | 특정 세션 폐기(204) | 인증 + 세션 소유자 |
 
 ### Property
 
@@ -196,7 +201,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 | 컨텍스트 | 파일 | 대표 코드 |
 |---|---|---|
-| Auth | [`src/auth/auth.errors.ts`](src/auth/auth.errors.ts) | `AUTH_EMAIL_IN_USE`(409) · `AUTH_INVALID_CREDENTIALS`(401) · `AUTH_KAKAO_UNAVAILABLE`(503) |
+| Auth | [`src/auth/auth.errors.ts`](src/auth/auth.errors.ts) | `AUTH_EMAIL_IN_USE`(409) · `AUTH_INVALID_CREDENTIALS`(401) · `AUTH_KAKAO_UNAVAILABLE`(503) · `AUTH_REFRESH_TOKEN_REUSED`(401) · `AUTH_NOT_SESSION_OWNER`(403) |
 | Property | [`src/property/property.errors.ts`](src/property/property.errors.ts) | `PROPERTY_NOT_BUILDING_OWNER`(403) · `PROPERTY_INVALID_INVITE_CODE`(404) |
 | Board | [`src/board/board.errors.ts`](src/board/board.errors.ts) | `BOARD_POST_NOT_FOUND`(404) · `BOARD_NOT_BUILDING_MEMBER`(403) |
 | Chat | [`src/chat/chat.errors.ts`](src/chat/chat.errors.ts) | `CHAT_ROOM_NOT_FOUND`(404) · `CHAT_NOT_ROOM_PARTICIPANT`(403) |

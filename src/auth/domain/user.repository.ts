@@ -1,4 +1,5 @@
 import { User } from './user.entity';
+import { TransactionClient } from '../../outbox/domain/transaction-runner';
 
 export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
 
@@ -12,5 +13,5 @@ export interface UserRepository {
     link: { provider: string; providerId: string },
   ): Promise<User>;
   findById(id: string): Promise<User | null>;
-  update(user: User): Promise<User>;
+  update(user: User, tx?: TransactionClient): Promise<User>;
 }

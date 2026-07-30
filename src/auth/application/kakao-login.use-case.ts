@@ -12,11 +12,9 @@ import {
   ONBOARDING_TOKEN,
   OnboardingTokenIssuer,
 } from '../domain/onboarding-token';
-import { TOKEN_ISSUER, TokenIssuer } from '../domain/token-issuer';
+import { IssueSessionService, TokenPair } from './issue-session.service';
 
-export type KakaoLoginResult =
-  | { accessToken: string }
-  | { onboardingToken: string };
+export type KakaoLoginResult = TokenPair | { onboardingToken: string };
 
 @Injectable()
 export class KakaoLoginUseCase {
@@ -26,7 +24,7 @@ export class KakaoLoginUseCase {
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
     @Inject(ONBOARDING_TOKEN)
     private readonly onboarding: OnboardingTokenIssuer,
-    @Inject(TOKEN_ISSUER) private readonly tokenIssuer: TokenIssuer,
+    private readonly issueSession: IssueSessionService,
   ) {}
 
   async execute(input: {
@@ -46,12 +44,12 @@ export class KakaoLoginUseCase {
     if (account) {
       const user = await this.users.findById(account.userId);
       if (!user) throw new AppException(AuthError.USER_NOT_FOUND);
-      const accessToken = await this.tokenIssuer.issue({
-        sub: user.id!,
+      // familyId를 주지 않으므로 새 가족(= 새 세션)이 만들어진다.
+      return this.issueSession.issue({
+        userId: user.id!,
         email: user.email,
         role: user.role,
       });
-      return { accessToken };
     }
 
     const onboardingToken = await this.onboarding.issue({
