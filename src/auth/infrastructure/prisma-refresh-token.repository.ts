@@ -65,8 +65,16 @@ export class PrismaRefreshTokenRepository implements RefreshTokenRepository {
     id: string,
     usedAt: Date,
     tx?: TransactionClient,
-  ): Promise<void> {
-    await this.client(tx).update({ where: { id }, data: { usedAt } });
+  ): Promise<number> {
+    // 조건 없는 update는 동시 요청 둘 다 통과시킨다(둘 다 usedAt: null을
+    // 읽었다면 나중 UPDATE가 그냥 덮어씀 — 에러 없음). where에 usedAt: null을
+    // 조건으로 걸어 compare-and-set으로 만든다: 먼저 커밋하는 쪽만 count=1,
+    // 진 쪽은 count=0을 받아 재사용 판정의 근거가 된다.
+    const { count } = await this.client(tx).updateMany({
+      where: { id, usedAt: null },
+      data: { usedAt },
+    });
+    return count;
   }
 
   async revokeFamily(
@@ -99,29 +107,35 @@ export class PrismaRefreshTokenRepository implements RefreshTokenRepository {
     userId: string,
     now: Date,
   ): Promise<SessionSummary[]> {
-    const rows = await this.prisma.refreshToken.findMany({
+    // 1단계: 활성 familyId 집합. 회전이 이전 행에 usedAt을 찍고 새 행을
+    // 넣는 구조라, 한 가족에서 usedAt: null인 행은 항상 최대 1개다 —
+    // 즉 여기서 얻는 건 "가족별 최신 행"이지 로그인 시각이 아니다.
+    const active = await this.prisma.refreshToken.findMany({
       where: {
         userId,
         usedAt: null,
         revokedAt: null,
         expiresAt: { gt: now },
       },
-      select: { familyId: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
+      select: { familyId: true },
     });
+    if (active.length === 0) return [];
+    const familyIds = active.map((row) => row.familyId);
 
-    // 가족별로 묶고 최초 createdAt(= 로그인 시각)만 남긴다.
-    // orderBy asc 이므로 먼저 만난 행이 가장 이르다.
-    const byFamily = new Map<string, Date>();
-    for (const row of rows) {
-      if (!byFamily.has(row.familyId)) {
-        byFamily.set(row.familyId, row.createdAt);
-      }
-    }
-    return [...byFamily].map(([familyId, createdAt]) => ({
-      familyId,
-      createdAt,
-    }));
+    // 2단계: 로그인 시각은 그 가족의 "첫 행"의 createdAt이다. 첫 행은 이미
+    // 회전으로 소비돼 usedAt이 채워져 있으므로, 여기서는 usedAt·revokedAt
+    // 조건을 걸지 않고 familyId로만 최솟값을 구한다.
+    const grouped = await this.prisma.refreshToken.groupBy({
+      by: ['familyId'],
+      where: { userId, familyId: { in: familyIds } },
+      _min: { createdAt: true },
+    });
+    return grouped
+      .filter((g) => g._min.createdAt != null)
+      .map((g) => ({
+        familyId: g.familyId,
+        createdAt: g._min.createdAt as Date,
+      }));
   }
 
   async findFamilyOwner(familyId: string): Promise<string | null> {

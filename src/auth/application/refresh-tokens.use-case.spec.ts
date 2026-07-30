@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { AppException } from '../../common/errors/app-exception';
 import {
   TransactionClient,
@@ -12,6 +13,9 @@ import { User } from '../domain/user.entity';
 import { UserRepository } from '../domain/user.repository';
 import { IssueSessionService, TokenPair } from './issue-session.service';
 import { RefreshTokensUseCase } from './refresh-tokens.use-case';
+
+// 재사용 탐지는 Sentry로도 알린다 — 코드베이스 관례대로 모듈 자동 모킹.
+jest.mock('@sentry/nestjs');
 
 const USER_ID = 'user-1';
 const EMAIL = 'tenant@example.com';
@@ -45,8 +49,8 @@ function setup(found: RefreshToken | null, options?: { userFound?: boolean }) {
       .fn<Promise<RefreshToken | null>, [string]>()
       .mockResolvedValue(found),
     markUsed: jest
-      .fn<Promise<void>, [string, Date, TransactionClient?]>()
-      .mockResolvedValue(undefined),
+      .fn<Promise<number>, [string, Date, TransactionClient?]>()
+      .mockResolvedValue(1),
     revokeFamily: jest
       .fn<Promise<number>, [string, Date, TransactionClient?]>()
       .mockResolvedValue(2),
@@ -217,6 +221,28 @@ describe('RefreshTokensUseCase', () => {
       );
     });
 
+    // I-1: 스펙 §12 — 재사용 탐지는 M10의 "4xx는 Sentry 제외" 원칙의
+    // 명시적 예외다. 토큰 원문·해시는 Sentry 메시지에 들어가면 안 된다.
+    it('should capture a Sentry warning with userId/familyId but no token material', async () => {
+      const { useCase } = setup(persisted({ usedAt: new Date() }));
+      expect.assertions(2);
+
+      try {
+        await useCase.execute(RAW_TOKEN);
+      } catch {
+        // 재사용 예외는 별도 케이스에서 검증한다.
+      }
+
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        expect.stringMatching(
+          new RegExp(`userId=${USER_ID}.*familyId=${FAMILY_ID}`),
+        ),
+        'warning',
+      );
+      const [message] = jest.mocked(Sentry.captureMessage).mock.calls[0];
+      expect(message).not.toContain(RAW_TOKEN);
+    });
+
     // 재사용 탐지 경로는 회전(markUsed·issue)을 절대 수행하면 안 된다.
     // 조건 순서를 바꿔 isUsed() 체크를 isUsable() 뒤로 옮기는 뮤테이션이
     // 들어와도, 이 단정이 없으면 "가족은 폐기됐지만 회전도 같이 일어났다"는
@@ -229,6 +255,28 @@ describe('RefreshTokensUseCase', () => {
 
       await expect(useCase.execute(RAW_TOKEN)).rejects.toThrow(AppException);
       expect(repo.markUsed).not.toHaveBeenCalled();
+      expect(issueSession.issue).not.toHaveBeenCalled();
+    });
+  });
+
+  // I-3: findByHash는 트랜잭션 밖이라 같은 토큰이 동시에 두 번 들어오면
+  // 둘 다 usedAt: null을 읽고 여기까지 온다. markUsed(compare-and-set)는
+  // 먼저 커밋한 쪽만 count=1이고 진 쪽은 count=0을 받는다 — 그 상태를
+  // 재현한다(레포지토리 mock이 count=0을 돌려주는 것으로 시뮬레이션).
+  describe('when markUsed loses the compare-and-set race (concurrent submission)', () => {
+    it('should throw REFRESH_TOKEN_REUSED and not issue a new pair', async () => {
+      const { useCase, repo, issueSession } = setup(persisted());
+      repo.markUsed.mockResolvedValue(0);
+      expect.assertions(3);
+
+      try {
+        await useCase.execute(RAW_TOKEN);
+      } catch (e) {
+        const error = e as AppException;
+        expect(error).toBeInstanceOf(AppException);
+        expect(error.code).toBe('AUTH_REFRESH_TOKEN_REUSED');
+      }
+
       expect(issueSession.issue).not.toHaveBeenCalled();
     });
   });

@@ -13,7 +13,9 @@ export interface SessionSummary {
 export interface RefreshTokenRepository {
   save(token: RefreshToken, tx?: TransactionClient): Promise<RefreshToken>;
   findByHash(tokenHash: string): Promise<RefreshToken | null>;
-  markUsed(id: string, usedAt: Date, tx?: TransactionClient): Promise<void>;
+  // 반환값은 실제로 갱신된 행 수(compare-and-set 결과). 0이면 이미 다른
+  // 요청이 같은 토큰을 소비했다는 뜻 — 호출부가 재사용으로 판정한다.
+  markUsed(id: string, usedAt: Date, tx?: TransactionClient): Promise<number>;
   // 반환값은 폐기된 행 수. 재사용 탐지 로깅에 쓴다.
   revokeFamily(
     familyId: string,

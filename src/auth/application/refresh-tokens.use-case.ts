@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { AppException } from '../../common/errors/app-exception';
 import {
   TRANSACTION_RUNNER,
@@ -47,9 +48,13 @@ export class RefreshTokensUseCase {
         found.familyId,
         now,
       );
-      this.logger.warn(
-        `리프레시 토큰 재사용 탐지 — 가족 폐기. userId=${found.userId} familyId=${found.familyId} revoked=${revoked}`,
-      );
+      const message = `리프레시 토큰 재사용 탐지 — 가족 폐기. userId=${found.userId} familyId=${found.familyId} revoked=${revoked}`;
+      this.logger.warn(message);
+      // 스펙 §12: 재사용 탐지는 M10에서 "4xx는 Sentry 제외"로 정한 원칙의
+      // 명시적 예외다 — 침해 신호라 운영 알림으로 올라가야 한다.
+      // DSN 미설정 시 Sentry.init을 건너뛰므로(initSentry) 이 호출은 no-op이다.
+      // 토큰 원문·해시는 넣지 않는다(userId·familyId·폐기 행 수만).
+      Sentry.captureMessage(message, 'warning');
       throw new AppException(AuthError.REFRESH_TOKEN_REUSED);
     }
 
@@ -66,7 +71,16 @@ export class RefreshTokensUseCase {
     // 소비 처리와 새 발급을 한 트랜잭션으로 묶는다. 나누면 "기존 토큰은
     // 소비됐는데 새 토큰이 없는" 상태가 가능해져 사용자가 튕긴다.
     return this.txRunner.run(async (tx) => {
-      await this.refreshTokens.markUsed(found.id!, now, tx);
+      // findByHash는 트랜잭션 밖이라 같은 토큰이 동시에 두 번 들어오면 둘 다
+      // usedAt: null을 읽고 여기까지 온다. markUsed는 `usedAt: null`을
+      // 조건으로 건 조건부 갱신(compare-and-set)이라, 먼저 커밋하는 쪽만
+      // count=1로 성공한다. 진 쪽은 count=0을 받는데 — 이미 다른 요청이
+      // 그 토큰을 소비했다는 뜻이므로 재사용으로 판정해 던진다.
+      // throw는 트랜잭션 안이므로 롤백되어 이 요청은 새 토큰도 남기지 않는다.
+      const updated = await this.refreshTokens.markUsed(found.id!, now, tx);
+      if (updated === 0) {
+        throw new AppException(AuthError.REFRESH_TOKEN_REUSED);
+      }
       return this.issueSession.issue(
         { userId: user.id!, email: user.email, role: user.role },
         found.familyId,
