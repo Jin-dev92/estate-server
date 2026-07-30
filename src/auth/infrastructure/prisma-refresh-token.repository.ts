@@ -51,14 +51,14 @@ export class PrismaRefreshTokenRepository implements RefreshTokenRepository {
         expiresAt: token.expiresAt,
       },
     });
-    return this.toEntity(row as RefreshTokenRow);
+    return this.toEntity(row);
   }
 
   async findByHash(tokenHash: string): Promise<RefreshToken | null> {
     const row = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
     });
-    return row ? this.toEntity(row as RefreshTokenRow) : null;
+    return row ? this.toEntity(row) : null;
   }
 
   async markUsed(
