@@ -2239,26 +2239,75 @@ export class LoginUseCase {
 
 - [ ] **Step 4: `kakao-login.use-case.ts` 수정**
 
-`TOKEN_ISSUER` 주입을 `IssueSessionService`로 교체하고, 기존 유저 분기의 `accessToken` 생성 부분을 바꾼다. `onboardingToken` 분기는 건드리지 않는다.
+세 곳을 바꾼다. `onboardingToken` 분기는 건드리지 않는다.
+
+(1) import — `TOKEN_ISSUER, TokenIssuer` import를 제거하고 추가한다.
 
 ```typescript
-// 기존:
-//   const accessToken = await this.tokenIssuer.issue({ sub: ..., email: ..., role: ... });
-//   return { accessToken };
-// 변경:
-    const pair = await this.issueSession.issue({
+import { IssueSessionService, TokenPair } from './issue-session.service';
+```
+
+(2) constructor — 마지막 주입을 교체한다.
+
+```typescript
+    @Inject(ONBOARDING_TOKEN)
+    private readonly onboarding: OnboardingTokenIssuer,
+    private readonly issueSession: IssueSessionService,
+  ) {}
+```
+
+(3) 기존 유저 분기 — `if (account) { ... }` 블록 안의 발급부를 교체한다.
+
+```typescript
+    if (account) {
+      const user = await this.users.findById(account.userId);
+      if (!user) throw new AppException(AuthError.USER_NOT_FOUND);
+      // familyId를 주지 않으므로 새 가족(= 새 세션)이 만들어진다.
+      return this.issueSession.issue({
+        userId: user.id!,
+        email: user.email,
+        role: user.role,
+      });
+    }
+```
+
+`KakaoLoginResult` 타입 선언을 찾아 `accessToken`만 갖던 분기를 `TokenPair`로 바꾼다. 파일 상단 근처에 있다.
+
+```typescript
+export type KakaoLoginResult = TokenPair | { onboardingToken: string };
+```
+
+- [ ] **Step 5: `complete-kakao-signup.use-case.ts` 수정**
+
+`tokenIssuer.issue` 호출이 두 곳 있다. 둘 다 바꾼다.
+
+(1) import와 constructor는 Step 4의 (1)·(2)와 같은 방식으로 교체한다.
+
+(2) 멱등 분기(이미 연결된 Account) — `if (existing) { ... }` 블록의 return을 교체한다.
+
+```typescript
+    if (existing) {
+      const user = await this.users.findById(existing.userId);
+      if (!user) throw new AppException(AuthError.USER_NOT_FOUND);
+      return this.issueSession.issue({
+        userId: user.id!,
+        email: user.email,
+        role: user.role,
+      });
+    }
+```
+
+(3) 신규 생성 분기 — 파일 끝의 return을 교체한다.
+
+```typescript
+    return this.issueSession.issue({
       userId: user.id!,
       email: user.email,
       role: user.role,
     });
-    return pair;
 ```
 
-반환 타입에 `TokenPair`를 반영한다. 신규 유저 분기가 `{ onboardingToken }`을 반환하므로 union 타입이면 `TokenPair | { onboardingToken: string }` 형태가 된다 — 기존 타입 선언을 읽고 그에 맞춰 수정한다.
-
-- [ ] **Step 5: `complete-kakao-signup.use-case.ts` 수정**
-
-이 파일에는 `tokenIssuer.issue` 호출이 두 곳(55행·84행 부근) 있다. 두 곳 모두 `issueSession.issue`로 바꾸고 `TokenPair`를 반환한다.
+반환 타입 선언을 `Promise<TokenPair>`로 바꾼다.
 
 - [ ] **Step 6: 전체 auth 테스트 통과 확인**
 
@@ -2383,7 +2432,21 @@ export class ChangePasswordUseCase {
 }
 ```
 
-> `UserRepository.update`가 `tx`를 받지 않으면 `src/auth/domain/user.repository.ts`와 `prisma-user.repository.ts`에 optional `tx?: TransactionClient` 파라미터를 추가한다. 다른 호출처는 인자를 생략하므로 영향이 없다.
+**함께 수정: `UserRepository.update`에 `tx` 추가 (확인됨 — 현재 시그니처는 `update(user: User): Promise<User>`로 `tx`를 받지 않는다)**
+
+`src/auth/domain/user.repository.ts`의 선언을 바꾼다.
+
+```typescript
+  update(user: User, tx?: TransactionClient): Promise<User>;
+```
+
+파일 상단에 import를 추가한다.
+
+```typescript
+import { TransactionClient } from '../../outbox/domain/transaction-runner';
+```
+
+`src/auth/infrastructure/prisma-user.repository.ts`의 `update` 구현에서 `this.prisma` 대신 `(tx ?? this.prisma)`를 쓰도록 바꾼다. 다른 호출처(`update-profile.use-case.ts`)는 인자를 생략하므로 영향이 없다.
 
 - [ ] **Step 4: 테스트 통과 확인**
 
@@ -2429,17 +2492,17 @@ export class RefreshTokenDto {
   })
   @IsString()
   @IsNotEmpty()
-  refreshToken!: string;
+  refreshToken: string;
 }
 
 export class TokenPairResponseDto {
   @ApiProperty({ description: '액세스 토큰(JWT). 기본 수명 15분' })
-  accessToken!: string;
+  accessToken: string;
 
   @ApiProperty({
     description: '리프레시 토큰. 갱신할 때마다 새 값으로 교체된다(회전)',
   })
-  refreshToken!: string;
+  refreshToken: string;
 }
 ```
 
@@ -2450,15 +2513,15 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class SessionResponseDto {
   @ApiProperty({ description: '세션(리프레시 토큰 가족) 식별자' })
-  familyId!: string;
+  familyId: string;
 
   @ApiProperty({ description: '이 세션이 시작된 시각(= 로그인 시각)' })
-  createdAt!: Date;
+  createdAt: Date;
 
   @ApiProperty({
     description: '이 요청을 보낸 세션인지 여부',
   })
-  current!: boolean;
+  current: boolean;
 }
 ```
 
@@ -2589,11 +2652,21 @@ git commit -m "[M15]feat: 갱신·로그아웃·세션 관리 엔드포인트 5�
     },
 ```
 
-`TRANSACTION_RUNNER`가 `AuthModule`에서 주입 가능한지 확인한다. `src/outbox/outbox.module.ts`가 `TRANSACTION_RUNNER`를 `exports`에 두고 있으면 `AuthModule`의 `imports`에 `OutboxModule`을 추가한다. 아니면 `AuthModule`의 providers에 직접 등록한다.
+**`TRANSACTION_RUNNER` 주입 (확인됨 — `src/outbox/outbox.module.ts:58`이 `exports: [TRANSACTION_RUNNER, OUTBOX_STORE]`로 내보낸다)**
+
+`AuthModule`의 `imports` 배열에 `OutboxModule`을 추가한다. providers에 직접 등록하지 않는다 — 같은 토큰을 두 모듈이 각자 등록하면 인스턴스가 갈린다.
 
 ```typescript
-    { provide: TRANSACTION_RUNNER, useClass: PrismaTransactionRunner },
+  imports: [
+    PassportModule,
+    OutboxModule,
+    JwtModule.registerAsync({
+      // ... 기존 설정 그대로
+    }),
+  ],
 ```
+
+순환 참조가 발생하면(`OutboxModule`이 `AuthModule`을 참조하는 경우) `forwardRef`가 아니라 `TRANSACTION_RUNNER`를 공용 모듈로 승격하는 방향을 검토하고, 판단이 필요하면 BLOCKED로 보고한다.
 
 - [ ] **Step 2: 전체 테스트 통과 확인**
 
