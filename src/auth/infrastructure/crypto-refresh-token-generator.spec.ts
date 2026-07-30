@@ -27,9 +27,7 @@ describe('CryptoRefreshTokenGenerator', () => {
 
       const { token, tokenHash } = generator.generate();
 
-      expect(tokenHash).toBe(
-        createHash('sha256').update(token).digest('hex'),
-      );
+      expect(tokenHash).toBe(createHash('sha256').update(token).digest('hex'));
     });
 
     it('should never return the raw token as its own hash', () => {

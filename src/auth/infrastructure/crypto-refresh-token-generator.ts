@@ -16,9 +16,8 @@ export class CryptoRefreshTokenGenerator implements RefreshTokenGenerator {
       String(DEFAULT_TOKEN_BYTES),
     );
     const parsed = Number.parseInt(raw, 10);
-    this.bytes = Number.isFinite(parsed) && parsed > 0
-      ? parsed
-      : DEFAULT_TOKEN_BYTES;
+    this.bytes =
+      Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TOKEN_BYTES;
   }
 
   generate(): { token: string; tokenHash: string } {

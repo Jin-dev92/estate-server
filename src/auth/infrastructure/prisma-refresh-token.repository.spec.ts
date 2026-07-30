@@ -23,9 +23,7 @@ function createDelegate() {
 
 function createRepo(delegate: ReturnType<typeof createDelegate>) {
   const prisma = { refreshToken: delegate };
-  return new PrismaRefreshTokenRepository(
-    prisma as unknown as PrismaService,
-  );
+  return new PrismaRefreshTokenRepository(prisma as unknown as PrismaService);
 }
 
 describe('PrismaRefreshTokenRepository', () => {

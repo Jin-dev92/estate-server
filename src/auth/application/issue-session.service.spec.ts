@@ -4,6 +4,7 @@ import { RefreshTokenGenerator } from '../domain/refresh-token-generator';
 import { RefreshTokenRepository } from '../domain/refresh-token.repository';
 import { TokenIssuer } from '../domain/token-issuer';
 import { RefreshToken } from '../domain/refresh-token.entity';
+import { TransactionClient } from '../../outbox/domain/transaction-runner';
 import { IssueSessionService } from './issue-session.service';
 
 const USER_ID = 'user-1';
@@ -30,7 +31,7 @@ function setup() {
 
   const repo = {
     save: jest
-      .fn()
+      .fn<Promise<RefreshToken>, [RefreshToken, TransactionClient?]>()
       .mockImplementation((token: RefreshToken) => Promise.resolve(token)),
   } satisfies Partial<jest.Mocked<RefreshTokenRepository>>;
 
@@ -39,8 +40,8 @@ function setup() {
   } satisfies Partial<jest.Mocked<ConfigService>>;
 
   const service = new IssueSessionService(
-    tokenIssuer as unknown as TokenIssuer,
-    generator as unknown as RefreshTokenGenerator,
+    tokenIssuer,
+    generator,
     repo as unknown as RefreshTokenRepository,
     config as unknown as ConfigService,
   );
@@ -78,7 +79,7 @@ describe('IssueSessionService', () => {
         role: Role.TENANT,
       });
 
-      const savedToken = repo.save.mock.calls[0][0] as RefreshToken;
+      const savedToken = repo.save.mock.calls[0][0];
       expect(tokenIssuer.issue).toHaveBeenCalledWith({
         sub: USER_ID,
         email: EMAIL,
@@ -96,7 +97,7 @@ describe('IssueSessionService', () => {
         role: Role.TENANT,
       });
 
-      const savedToken = repo.save.mock.calls[0][0] as RefreshToken;
+      const savedToken = repo.save.mock.calls[0][0];
       expect(savedToken.tokenHash).toBe(TOKEN_HASH);
       expect(savedToken.tokenHash).not.toBe(RAW_TOKEN);
     });
@@ -111,7 +112,7 @@ describe('IssueSessionService', () => {
         EXISTING_FAMILY,
       );
 
-      const savedToken = repo.save.mock.calls[0][0] as RefreshToken;
+      const savedToken = repo.save.mock.calls[0][0];
       expect(savedToken.familyId).toBe(EXISTING_FAMILY);
       expect(tokenIssuer.issue).toHaveBeenCalledWith(
         expect.objectContaining({ fam: EXISTING_FAMILY }),
@@ -167,7 +168,7 @@ describe('IssueSessionService', () => {
 
       await service.issue({ userId: USER_ID, email: EMAIL, role: Role.TENANT });
 
-      const savedToken = repo.save.mock.calls[0][0] as RefreshToken;
+      const savedToken = repo.save.mock.calls[0][0];
       expect(savedToken.expiresAt.getTime() - NOW.getTime()).toBe(
         CUSTOM_TTL_DAYS * MS_PER_DAY,
       );
@@ -190,7 +191,7 @@ describe('IssueSessionService', () => {
           role: Role.TENANT,
         });
 
-        const savedToken = repo.save.mock.calls[0][0] as RefreshToken;
+        const savedToken = repo.save.mock.calls[0][0];
         expect(savedToken.expiresAt.getTime() - NOW.getTime()).toBe(
           DEFAULT_TTL_DAYS * MS_PER_DAY,
         );
