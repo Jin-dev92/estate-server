@@ -84,8 +84,15 @@ describe('KakaoLoginUseCase', () => {
     const r = await uc.execute({ code: 'c', redirectUri: 'r' });
 
     expect(r).toEqual(TOKEN_PAIR);
-    // 두 번째 인자(familyId)를 넘기면 기존 세션과 뒤섞이므로 undefined여야 한다.
-    expect(issueSession.issue.mock.calls[0][1]).toBeUndefined();
+    // mock을 TOKEN_ISSUER에서 IssueSessionService로 교체하며 사라졌던 검증을 복원한다.
+    // 인자가 조회된 유저(userId/email/role)와 정확히 일치하는지 확인한다.
+    // toHaveBeenCalledWith는 인자 개수까지 정확히 비교하므로, familyId를 추가로
+    // 넘기지 않았다는 것(기존 세션과 뒤섞이지 않음)도 이 한 줄로 함께 검증된다.
+    expect(issueSession.issue).toHaveBeenCalledWith({
+      userId: 'u1',
+      email: 'a@b.com',
+      role: Role.TENANT,
+    });
   });
 
   it('신규면 onboardingToken 반환', async () => {
@@ -190,8 +197,15 @@ describe('CompleteKakaoSignupUseCase', () => {
 
     expect(r).toEqual(TOKEN_PAIR);
     expect(linkedProviderIds).toEqual(['k1']);
-    // 신규 가입도 새 세션이므로 familyId를 넘기면 안 된다.
-    expect(issueSession.issue.mock.calls[0][1]).toBeUndefined();
+    // mock을 TOKEN_ISSUER에서 IssueSessionService로 교체하며 사라졌던 검증을 복원한다.
+    // 인자가 새로 생성된 유저(userId/email/role)와 정확히 일치하는지 확인한다.
+    // toHaveBeenCalledWith는 인자 개수까지 정확히 비교하므로, familyId를 추가로
+    // 넘기지 않았다는 것(신규 가입이므로 새 세션)도 이 한 줄로 함께 검증된다.
+    expect(issueSession.issue).toHaveBeenCalledWith({
+      userId: 'u1',
+      email: 'a@b.com',
+      role: Role.OWNER,
+    });
   });
 
   it('잘못된 role이면 INVALID_ROLE', async () => {
@@ -266,8 +280,15 @@ describe('CompleteKakaoSignupUseCase', () => {
 
     expect(r).toEqual(TOKEN_PAIR);
     expect(saveCalled).toBe(false);
-    // 멱등 분기도 새 세션이므로 familyId를 넘기면 안 된다.
-    expect(issueSession.issue.mock.calls[0][1]).toBeUndefined();
+    // mock을 TOKEN_ISSUER에서 IssueSessionService로 교체하며 사라졌던 검증을 복원한다.
+    // 인자가 기존 유저(userId/email/role)와 정확히 일치하는지 확인한다.
+    // toHaveBeenCalledWith는 인자 개수까지 정확히 비교하므로, familyId를 추가로
+    // 넘기지 않았다는 것(멱등 분기도 새 세션)도 이 한 줄로 함께 검증된다.
+    expect(issueSession.issue).toHaveBeenCalledWith({
+      userId: 'u1',
+      email: 'a@b.com',
+      role: Role.TENANT,
+    });
   });
 
   it('saveWithAccount P2002 이면 EMAIL_IN_USE', async () => {
