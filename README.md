@@ -201,7 +201,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 | 컨텍스트 | 파일 | 대표 코드 |
 |---|---|---|
-| Auth | [`src/auth/auth.errors.ts`](src/auth/auth.errors.ts) | `AUTH_EMAIL_IN_USE`(409) · `AUTH_INVALID_CREDENTIALS`(401) · `AUTH_KAKAO_UNAVAILABLE`(503) · `AUTH_REFRESH_TOKEN_REUSED`(401) |
+| Auth | [`src/auth/auth.errors.ts`](src/auth/auth.errors.ts) | `AUTH_EMAIL_IN_USE`(409) · `AUTH_INVALID_CREDENTIALS`(401) · `AUTH_KAKAO_UNAVAILABLE`(503) · `AUTH_REFRESH_TOKEN_REUSED`(401) · `AUTH_NOT_SESSION_OWNER`(403) |
 | Property | [`src/property/property.errors.ts`](src/property/property.errors.ts) | `PROPERTY_NOT_BUILDING_OWNER`(403) · `PROPERTY_INVALID_INVITE_CODE`(404) |
 | Board | [`src/board/board.errors.ts`](src/board/board.errors.ts) | `BOARD_POST_NOT_FOUND`(404) · `BOARD_NOT_BUILDING_MEMBER`(403) |
 | Chat | [`src/chat/chat.errors.ts`](src/chat/chat.errors.ts) | `CHAT_ROOM_NOT_FOUND`(404) · `CHAT_NOT_ROOM_PARTICIPANT`(403) |

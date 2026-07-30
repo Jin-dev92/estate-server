@@ -54,7 +54,16 @@ export class RefreshTokensUseCase {
       // 명시적 예외다 — 침해 신호라 운영 알림으로 올라가야 한다.
       // DSN 미설정 시 Sentry.init을 건너뛰므로(initSentry) 이 호출은 no-op이다.
       // 토큰 원문·해시는 넣지 않는다(userId·familyId·폐기 행 수만).
-      Sentry.captureMessage(message, 'warning');
+      // 메시지는 고정 문자열로 둔다 — userId·familyId를 문자열에 넣으면
+      // 이벤트마다 메시지가 달라져 Sentry가 각각을 별개 이슈로 그룹핑한다.
+      // (all-exceptions.filter.ts와 동일하게 scope 콜백으로 구조화 컨텍스트를 싣는다.)
+      Sentry.captureMessage('refresh token reuse detected', (scope) => {
+        scope.setLevel('warning');
+        scope.setUser({ id: found.userId });
+        scope.setTag('familyId', found.familyId);
+        scope.setTag('revokedCount', String(revoked));
+        return scope;
+      });
       throw new AppException(AuthError.REFRESH_TOKEN_REUSED);
     }
 

@@ -223,9 +223,12 @@ describe('RefreshTokensUseCase', () => {
 
     // I-1: 스펙 §12 — 재사용 탐지는 M10의 "4xx는 Sentry 제외" 원칙의
     // 명시적 예외다. 토큰 원문·해시는 Sentry 메시지에 들어가면 안 된다.
-    it('should capture a Sentry warning with userId/familyId but no token material', async () => {
+    // 리뷰 반영: 메시지 문자열에 userId·familyId를 넣으면 이벤트마다 메시지가
+    // 달라져 Sentry 그룹핑이 깨진다 — 고정 메시지 + scope 콜백으로 구조화
+    // 컨텍스트를 싣는지 검증한다.
+    it('should capture a fixed Sentry message with structured user/tag context but no token material', async () => {
       const { useCase } = setup(persisted({ usedAt: new Date() }));
-      expect.assertions(2);
+      expect.assertions(5);
 
       try {
         await useCase.execute(RAW_TOKEN);
@@ -233,14 +236,20 @@ describe('RefreshTokensUseCase', () => {
         // 재사용 예외는 별도 케이스에서 검증한다.
       }
 
-      expect(Sentry.captureMessage).toHaveBeenCalledWith(
-        expect.stringMatching(
-          new RegExp(`userId=${USER_ID}.*familyId=${FAMILY_ID}`),
-        ),
-        'warning',
-      );
-      const [message] = jest.mocked(Sentry.captureMessage).mock.calls[0];
+      const [message, captureContext] = jest.mocked(Sentry.captureMessage).mock
+        .calls[0];
+      expect(message).toBe('refresh token reuse detected');
       expect(message).not.toContain(RAW_TOKEN);
+
+      const setLevel = jest.fn<Sentry.Scope, [Sentry.SeverityLevel]>();
+      const setUser = jest.fn<Sentry.Scope, [Sentry.User | null]>();
+      const setTag = jest.fn<Sentry.Scope, [string, unknown]>();
+      const scope = { setLevel, setUser, setTag } as unknown as Sentry.Scope;
+      (captureContext as (scope: Sentry.Scope) => Sentry.Scope)(scope);
+
+      expect(setUser).toHaveBeenCalledWith({ id: USER_ID });
+      expect(setTag).toHaveBeenCalledWith('familyId', FAMILY_ID);
+      expect(setLevel).toHaveBeenCalledWith('warning');
     });
 
     // 재사용 탐지 경로는 회전(markUsed·issue)을 절대 수행하면 안 된다.

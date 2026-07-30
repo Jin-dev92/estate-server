@@ -13,6 +13,7 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -305,6 +306,10 @@ export class AuthController {
   @ApiBearerAuth(SWAGGER_BEARER_AUTH)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '특정 세션 폐기' })
+  @ApiParam({
+    name: 'familyId',
+    description: 'GET /auth/sessions 응답의 familyId(세션 식별자)',
+  })
   @ApiResponse({ status: 204, description: '폐기 완료' })
   @ApiResponse({
     status: 403,
