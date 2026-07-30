@@ -126,7 +126,7 @@ describe('IssueSessionService', () => {
   describe('tx propagation', () => {
     it('should pass the given tx to repository.save', async () => {
       const { service, repo } = setup();
-      const tx = { marker: 'fake-tx' } as never;
+      const tx = { marker: 'fake-tx' } as unknown as TransactionClient;
 
       await service.issue(
         { userId: USER_ID, email: EMAIL, role: Role.TENANT },
