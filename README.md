@@ -7,6 +7,13 @@
 > **레포 구성:** 백엔드(이 레포) + 프론트엔드 `web/`(Next.js, [estate-web](https://github.com/Jin-dev92/estate-web) **git 서브모듈**).
 > **상태:** 설계 확정, 마일스톤 기반 구현 진행 — 상세 설계는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Jin-dev92/estate-web/main/docs/screenshots/screens.gif" alt="터전 주요 화면 — 로그인, 입주자 대시보드, 게시판, 게시글, 1:1 채팅, 알림, 설정, 건물주 대시보드, 건물 관리, 호실 관리" width="900">
+</p>
+
+이 백엔드가 구동하는 화면입니다. 로그인 → 입주자 대시보드 → 게시판 → 게시글 → 1:1 채팅 → 알림 → 설정 → 건물주 대시보드 → 건물 관리 → 호실 관리 순서로 전환됩니다.
+GIF는 `web/` 서브모듈([estate-web `docs/screenshots/`](https://github.com/Jin-dev92/estate-web/blob/main/docs/screenshots/screens.gif))을 참조합니다 — 단일 출처라 FE에서 화면을 갱신하면 여기도 함께 바뀝니다. 재생성 절차는 [estate-web `docs/guides/screenshots.md`](https://github.com/Jin-dev92/estate-web/blob/main/docs/guides/screenshots.md)에 있습니다.
+
 ---
 
 ## 한눈에 보기
