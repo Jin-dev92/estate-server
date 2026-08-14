@@ -1,18 +1,18 @@
 # estate-server — 건물주·입주자 커뮤니케이션 플랫폼
 
-건물주와 입주자를 잇는 백엔드 플랫폼입니다. **Prisma · Redis · Kafka** 를 한 프로젝트 안에서 의미 있게 엮어 보며, 분산·이벤트 드리븐 백엔드 설계 역량을 쌓기 위한 개인 학습 프로젝트입니다.
+건물주와 입주자를 잇는 백엔드 플랫폼입니다. **Prisma · Redis · Kafka** 를 한 프로젝트 안에서 의미 있게 엮어 보며 분산·이벤트 드리븐 백엔드 설계 역량을 쌓는 개인 학습 프로젝트입니다.
 
 `건물주(Owner) → 건물(Building) → 호실(Unit) → 입주(Lease)` 4계층 모델 위에서, 입주자는 **초대코드**로 호실에 연결되고 같은 건물 입주자끼리 **게시판**으로 소통하며 건물주와 **1:1 실시간 채팅·알림**을 주고받습니다.
 
 > **레포 구성:** 백엔드(이 레포) + 프론트엔드 `web/`(Next.js, [estate-web](https://github.com/Jin-dev92/estate-web) **git 서브모듈**).
-> **상태:** 설계 확정, 마일스톤 기반 구현 진행 — 상세 설계는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.
+> **상태:** 설계 확정, 마일스톤 기반 구현 진행 중입니다. 상세 설계는 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Jin-dev92/estate-web/main/docs/screenshots/screens.gif" alt="터전 주요 화면 — 로그인, 입주자 대시보드, 게시판, 게시글, 1:1 채팅, 알림, 설정, 건물주 대시보드, 건물 관리, 호실 관리" width="900">
 </p>
 
 이 백엔드가 구동하는 화면입니다. 로그인 → 입주자 대시보드 → 게시판 → 게시글 → 1:1 채팅 → 알림 → 설정 → 건물주 대시보드 → 건물 관리 → 호실 관리 순서로 전환됩니다.
-GIF는 `web/` 서브모듈([estate-web `docs/screenshots/`](https://github.com/Jin-dev92/estate-web/blob/main/docs/screenshots/screens.gif))을 참조합니다 — 단일 출처라 FE에서 화면을 갱신하면 여기도 함께 바뀝니다. 재생성 절차는 [estate-web `docs/guides/screenshots.md`](https://github.com/Jin-dev92/estate-web/blob/main/docs/guides/screenshots.md)에 있습니다.
+GIF는 `web/` 서브모듈([estate-web `docs/screenshots/`](https://github.com/Jin-dev92/estate-web/blob/main/docs/screenshots/screens.gif))을 참조합니다. 단일 출처라 FE에서 화면을 갱신하면 여기도 함께 바뀝니다. 재생성 절차는 [estate-web `docs/guides/screenshots.md`](https://github.com/Jin-dev92/estate-web/blob/main/docs/guides/screenshots.md)에 있습니다.
 
 ---
 
@@ -21,7 +21,7 @@ GIF는 `web/` 서브모듈([estate-web `docs/screenshots/`](https://github.com/J
 **이 프로젝트가 증명하는 것**
 
 - **이벤트 유실 없는 설계** — Transactional Outbox + DLQ(지수 백오프): 도메인 변경과 이벤트 적재를 한 트랜잭션으로 묶어 "DB엔 썼는데 이벤트는 유실" 창을 제거
-- **진짜 팬아웃** — Kafka 컨슈머 워커 3종(persistence·notification·audit)을 독립 프로세스·독립 consumer group으로 분리해, 같은 이벤트를 서로 다른 관심사로 한 번씩 소비
+- **진짜 팬아웃** — Kafka 컨슈머 워커 3종(persistence·notification·audit)을 독립 프로세스·독립 consumer group으로 분리해 같은 이벤트를 서로 다른 관심사로 한 번씩 소비
 - **측정 기반 접근** — k6 baseline/stress/spike로 병목(DB 커넥션 풀)을 숫자로 특정: 풀을 좁히자 p95 13.6ms → 1,734ms, throughput 천장 ~95 RPS
 - **품질 게이트** — 단위테스트 225개 + CI 3중 게이트(경고 0 lint · Prisma 마이그레이션 drift 검사 · 자동 코드리뷰)
 
@@ -46,7 +46,7 @@ flowchart TB
     AW -->|"AuditLog 적재"| PG
 ```
 
-**30초 요약** — 클라이언트 요청은 main 프로세스가 받고, 도메인 변경과 이벤트 적재(Outbox)를 **한 트랜잭션**으로 커밋합니다. outbox-relay가 이를 Kafka로 발행하면 세 워커가 **각자 독립 consumer group**으로 팬아웃 소비합니다. 채팅은 지연에 민감해 **실시간 전달(Redis pub/sub)과 영속화(Kafka 컨슈머)를 분리**했고, 워커(별도 프로세스)의 알림 푸시는 Redis 채널로 main의 WS Gateway에 브리지됩니다.
+**30초 요약** — 클라이언트 요청은 main 프로세스가 받아 도메인 변경과 이벤트 적재(Outbox)를 **한 트랜잭션**으로 커밋합니다. outbox-relay가 이를 Kafka로 발행하면 세 워커가 **각자 독립 consumer group**으로 팬아웃 소비합니다. 채팅은 지연에 민감해 **실시간 전달(Redis pub/sub)과 영속화(Kafka 컨슈머)를 분리**했습니다. 워커(별도 프로세스)의 알림 푸시는 Redis 채널로 main의 WS Gateway에 브리지됩니다.
 
 ---
 
@@ -91,7 +91,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 > 워커는 같은 코드베이스를 다른 엔트리포인트(`src/workers/*.main.ts`)로 띄운 별도 프로세스입니다. 서버 기동 후 **`/docs`**(Swagger UI)·**`/docs-json`**(OpenAPI JSON)에서 인터랙티브 API 문서를 볼 수 있습니다.
 >
-> 현재 main에는 비활성 `ChatPersistenceController`(microservice 미연결)가 남아 있으나, 영속화는 persistence-worker가 담당합니다(후속 정리 대상).
+> 현재 main에는 비활성 `ChatPersistenceController`(microservice 미연결)가 남아 있으나 영속화는 persistence-worker가 담당합니다. 후속 정리 대상입니다.
 
 ---
 
@@ -112,7 +112,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 ## API 레퍼런스
 
-> API가 추가·변경되면 이 표와 PR 본문을 함께 갱신합니다(CLAUDE.md "API 문서화" 규칙). 모든 보호 엔드포인트는 `Authorization: Bearer <accessToken>` 헤더가 필요합니다. 요청·응답 스키마와 enum 허용값의 진실 원천은 **`/docs`(Swagger)** 이며, 아래는 요약입니다.
+> API가 추가·변경되면 이 표와 PR 본문을 함께 갱신합니다(CLAUDE.md "API 문서화" 규칙). 모든 보호 엔드포인트는 `Authorization: Bearer <accessToken>` 헤더가 필요합니다. 요청·응답 스키마와 enum 허용값의 진실 원천은 **`/docs`(Swagger)** 이며 아래는 요약입니다.
 
 ### Auth
 
@@ -159,7 +159,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 > **건물 멤버** = 건물주이거나 그 건물 호실에 ACTIVE 입주(Lease)가 있는 사용자.
 >
-> **Rate limit:** 모든 쓰기 라우트는 전역 `RateLimitGuard`로 userId+IP 이중 제한(기본 user 60·IP 120/분). 스팸 표면이 큰 '생성' 라우트는 더 조인다 — `POST …/posts` = user 20·IP 30/분, `POST …/comments` = user 30·IP 60/분(`BOARD_RATE_LIMIT` 상수). 좋아요는 멱등·연타 허용이라 기본 한도. 초과 시 429(`RATE_LIMIT_EXCEEDED`) + `Retry-After`.
+> **Rate limit:** 모든 쓰기 라우트는 전역 `RateLimitGuard`로 userId+IP 이중 제한(기본 user 60·IP 120/분). 스팸 표면이 큰 '생성' 라우트는 더 조인다: `POST …/posts` = user 20·IP 30/분, `POST …/comments` = user 30·IP 60/분(`BOARD_RATE_LIMIT` 상수). 좋아요는 멱등·연타 허용이라 기본 한도. 초과 시 429(`RATE_LIMIT_EXCEEDED`) + `Retry-After`.
 
 ### Chat
 
@@ -192,7 +192,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 ### 에러 응답 형식
 
-모든 4xx/5xx 에러는 전역 ExceptionFilter가 아래 봉투로 통일해 내려줍니다. **FE는 메시지 문구 대신 안정적인 `code`로 분기**합니다.
+모든 4xx/5xx 에러는 전역 ExceptionFilter가 아래 봉투로 통일해 내려줍니다. **FE는 메시지 문구가 아니라 안정적인 `code`로 분기**합니다.
 
 ```json
 {
@@ -204,7 +204,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 }
 ```
 
-`code`의 진실 원천은 컨텍스트별 에러 정의 파일이며, 각 코드의 HTTP status와 메시지가 한곳에 선언되어 있습니다.
+`code`의 진실 원천은 컨텍스트별 에러 정의 파일이며 각 코드의 HTTP status와 메시지가 한곳에 선언되어 있습니다.
 
 | 컨텍스트 | 파일 | 대표 코드 |
 |---|---|---|
@@ -221,7 +221,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 ## 마일스톤
 
-각 단계는 독립적으로 동작 검증되도록 끊었고, 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시켰습니다. M0~M7이 1차 범위(핵심 기능·정합성·부하 baseline)이고, M8 이후는 그 위에 운영 견고함·관측성·측정 기반 성능 개선을 얹는 후속입니다.
+각 단계는 독립적으로 동작을 검증할 수 있게 끊어 뒀습니다. 컨슈머는 난이도 순(audit → persistence → notification)으로 도입해 실패 비용을 점증시켰습니다. M0~M7이 1차 범위(핵심 기능·정합성·부하 baseline)이고 M8 이후는 그 위에 운영 견고함·관측성·측정 기반 성능 개선을 얹는 후속입니다.
 
 | 단계 | 내용 · 학습 포커스 | 상세 |
 |---|---|---|
@@ -252,14 +252,14 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 ## 설계 결정
 
-모든 설계는 "왜 그렇게 했는가"를 근거와 트레이드오프로 남겼습니다. 각 결정의 대안 비교와 깊은 맥락은 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.
+설계마다 "왜 그렇게 했는가"를 근거와 트레이드오프로 적어 뒀습니다. 각 결정의 대안 비교와 깊은 맥락은 [설계 스펙 문서](docs/superpowers/specs/2026-06-11-building-owner-platform-design.md)에 있습니다.
 
 | # | 결정 | 근거 | 트레이드오프 |
 |---|---|---|---|
 | 1 | 도메인을 `건물 → 호실 → 입주` 3계층으로 | 호실 단위 점유·소통("특정 호실에만 보이는 공지")을 표현할 수 있다 | 모델이 무거워지지만 그 무게가 곧 Prisma 관계 학습 표면적 |
-| 2 | 입주 연결은 초대코드 방식 | 신청/승인 상태머신 없이 단순하고, Redis TTL 학습과 `TenantJoined` 이벤트 소스를 확보 | 코드 분실·재발급 흐름을 따로 다뤄야 함 |
+| 2 | 입주 연결은 초대코드 방식 | 신청/승인 상태머신 없이 단순하고 Redis TTL 학습과 `TenantJoined` 이벤트 소스를 확보 | 코드 분실·재발급 흐름을 따로 다뤄야 함 |
 | 3 | 게시판: 건물 단위 + read-through 캐시 + 쓰기 시 명시적 무효화 | 읽기 ≫ 쓰기인 전형적 read-heavy 영역이라 캐시 효과가 분명 | 캐시 일관성 관리 비용 → 명시적 무효화 + 짧은 TTL 안전망 |
-| 4 | 채팅: 실시간 전달(Redis pub/sub) ↔ 영속화(Kafka) 분리 | 체감 지연을 낮추고, Kafka를 쓰기 버퍼로 두어 스파이크 흡수 | "전달은 됐는데 DB엔 아직" 창이 생김. 순서는 `roomId` 파티션 키로 보장 |
+| 4 | 채팅: 실시간 전달(Redis pub/sub) ↔ 영속화(Kafka) 분리 | 체감 지연을 낮추고 Kafka를 쓰기 버퍼로 두어 스파이크 흡수 | "전달은 됐는데 DB엔 아직" 창이 생김. 순서는 `roomId` 파티션 키로 보장 |
 | 5 | 알림은 인앱+WS만, 외부 푸시(FCM) 제외 | 키 발급·구독 관리가 학습 본질(Kafka→Redis→WS)을 흐린다 | 브라우저를 닫으면 도달 불가 → 상용화 시 FCM 소비자 하나만 추가하면 되는 구조 |
 | 6 | Kafka 토픽 3분할 + 다중 컨슈머 그룹 팬아웃 | 이벤트 1건을 persistence·notification·audit이 독립 소비하는 팬아웃이 핵심 학습 목표 | at-least-once라 멱등 소비자(메시지 ID upsert)가 필수 |
 | 7 | DDD 레이어드 + 의존성 역전 | 컨텍스트=모듈 경계라 컨텍스트 간 통신이 도메인 이벤트로 자연스럽게 풀린다 | 보일러플레이트 증가 → 레이어 두께를 컨텍스트 복잡도에 비례 |
@@ -274,7 +274,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 
 ## 부하테스트 결과
 
-> 로컬 단일 머신(앱+PG+Redis+Kafka 동시 구동) 기준 — 절대치가 아니라 **상대 비교·회귀 감지**용. 실행법·전체 표·해석은 [`load/README.md`](load/README.md)와 [`load/results/`](load/results), 개념 정리는 [학습 노트 §8.5](docs/study/마일스톤-학습-노트.md).
+> 로컬 단일 머신(앱+PG+Redis+Kafka 동시 구동) 기준으로, 절대치가 아니라 **상대 비교·회귀 감지**용. 실행법·전체 표·해석은 [`load/README.md`](load/README.md)와 [`load/results/`](load/results), 개념 정리는 [학습 노트 §8.5](docs/study/마일스톤-학습-노트.md).
 
 | 시나리오 | 프로파일 | p95 | 에러율 | 무엇을 보나 |
 |---|---|---|---|---|
@@ -286,7 +286,7 @@ $ pnpm load:seed && PROFILE=load pnpm load:read
 | `POST .../posts` **spike** | 5→300→5 RPS | **10ms** | 84%\* | 급증분 429 차단 4032·통과 743·5xx 0(앱 생존) |
 | `GET .../posts` 좋아요 집계 | load 20VU, 글 50×좋아요 2000 | COUNT **73.46ms** → Redis 카운터 **13.27ms** | 0% | 파생 카운터 캐시 전후 비교 |
 
-\* 84%는 의도된 방어(429)이지 실패가 아닙니다. 로컬은 머신이 먼저 한계라, stress는 DB 풀을 1로 좁혀 *앱이 먼저* 터지게 한 통제 실험으로 진행했습니다.
+\* 84%는 의도된 방어(429)이지 실패가 아닙니다. 로컬은 머신이 먼저 한계라 stress는 DB 풀을 1로 좁혀 *앱이 먼저* 터지게 한 통제 실험으로 진행했습니다.
 
 ---
 
